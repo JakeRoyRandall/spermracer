@@ -522,67 +522,172 @@ export default function Game() {
     const width = canvas.width / window.devicePixelRatio
     const height = canvas.height / window.devicePixelRatio
     
-    ctx.fillStyle = '#000'
+    // Create a background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, height)
+    gradient.addColorStop(0, '#FF90B3')  // Pink color at top
+    gradient.addColorStop(1, '#FF5C8D')  // Darker pink color at bottom
+    ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
     
-    ctx.fillStyle = '#fff'
-    ctx.font = '36px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText('Sperm Racer', width / 2, height / 3)
+    // Add some swimming "sperm" particles in the background
+    for (let i = 0; i < 20; i++) {
+      const x = Math.random() * width
+      const y = Math.random() * height
+      const size = 3 + Math.random() * 7
+      
+      // Draw small swimming sperm cells
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+      ctx.beginPath()
+      ctx.arc(x, y, size, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // Draw tail
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(x - size, y)
+      
+      // Wavy tail
+      for (let j = 1; j <= 5; j++) {
+        const amplitude = size / 2
+        const offset = j % 2 === 0 ? amplitude : -amplitude
+        ctx.lineTo(x - size - j * size * 1.5, y + offset)
+      }
+      
+      ctx.stroke()
+    }
     
-    ctx.font = '18px Arial'
-    ctx.fillText('Press SPACE to start', width / 2, height / 2)
+    // Add title text
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 48px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('SPERM RACER', width / 2, height / 3)
+    
+    // Add subtitle
+    ctx.font = '24px Arial'
+    ctx.fillText('The Race to Fertilization', width / 2, height / 3 + 40)
+    
+    // Add start instructions
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.font = '20px Arial'
     
     if (isMobile()) {
-      ctx.fillText('Tap screen to start', width / 2, height / 2 + 30)
+      ctx.fillText('Tap to Start', width / 2, height / 2 + 40)
+      ctx.font = '16px Arial'
+      ctx.fillText('Use the joystick to control', width / 2, height / 2 + 70)
     } else {
-      ctx.fillText('Use arrow keys or WASD to control', width / 2, height / 2 + 30)
+      ctx.fillText('Press SPACE to start', width / 2, height / 2 + 40)
+      ctx.font = '16px Arial'
+      ctx.fillText('Use arrow keys or WASD to control', width / 2, height / 2 + 70)
     }
     
+    // Add best time if available
     if (bestTime) {
-      ctx.fillText(`Best Time: ${formatTime(bestTime)}`, width / 2, height / 2 + 60)
+      ctx.fillStyle = '#FFD700'  // Gold color
+      ctx.font = 'bold 18px Arial'
+      ctx.fillText(`Best Time: ${formatTime(bestTime)}`, width / 2, height / 2 + 120)
     }
+    
+    // Add game instructions
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+    ctx.font = '14px Arial'
+    ctx.fillText('Race through the checkpoints', width / 2, height - 60)
+    ctx.fillText('Complete 3 laps to win', width / 2, height - 40)
   }
   
   const renderCountdown = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     const width = canvas.width / window.devicePixelRatio
     const height = canvas.height / window.devicePixelRatio
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
     ctx.fillRect(0, 0, width, height)
     
+    // Draw the countdown number with animation effect
     ctx.fillStyle = '#fff'
-    ctx.font = '64px Arial'
+    const fontSize = 84 + Math.sin(performance.now() / 200) * 10 // Pulsing animation
+    ctx.font = `bold ${fontSize}px Arial`
     ctx.textAlign = 'center'
     ctx.fillText(countdown.toString(), width / 2, height / 2)
+    
+    // Add some text
+    ctx.font = '24px Arial'
+    ctx.fillText(countdown > 0 ? 'Get Ready...' : 'GO!', width / 2, height / 2 + 60)
   }
   
   const renderFinished = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     const width = canvas.width / window.devicePixelRatio
     const height = canvas.height / window.devicePixelRatio
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+    // Semi-transparent overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, width, height)
     
+    // Create a light ray effect behind the text
+    const centerX = width / 2
+    const centerY = height / 3
+    const outerRadius = Math.max(width, height)
+    
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, outerRadius)
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)')
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.1)')
+    gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+    
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, width, height)
+    
+    // Main title
     ctx.fillStyle = '#fff'
-    ctx.font = '36px Arial'
+    const titleText = gameContextRef.current.bestTime !== null && 
+                     gameContextRef.current.time <= gameContextRef.current.bestTime
+                     ? 'NEW RECORD!' 
+                     : 'RACE COMPLETE!'
+    
+    ctx.font = 'bold 48px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('Race Complete!', width / 2, height / 3)
+    ctx.fillText(titleText, width / 2, height / 3)
     
-    ctx.font = '24px Arial'
-    ctx.fillText(`Time: ${formatTime(gameContextRef.current.time)}`, width / 2, height / 2)
+    // Create a stylized box for the time
+    const boxWidth = 300
+    const boxHeight = 80
+    const boxX = width / 2 - boxWidth / 2
+    const boxY = height / 2 - boxHeight / 2
     
-    if (gameContextRef.current.bestTime !== null && gameContextRef.current.time <= gameContextRef.current.bestTime) {
-      ctx.fillStyle = '#ffff00'
-      ctx.fillText('New Best Time!', width / 2, height / 2 + 40)
+    // Box shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.fillRect(boxX + 5, boxY + 5, boxWidth, boxHeight)
+    
+    // Box background
+    const boxGradient = ctx.createLinearGradient(boxX, boxY, boxX, boxY + boxHeight)
+    boxGradient.addColorStop(0, '#FF90B3')
+    boxGradient.addColorStop(1, '#FF5C8D')
+    ctx.fillStyle = boxGradient
+    ctx.fillRect(boxX, boxY, boxWidth, boxHeight)
+    
+    // Box border
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 2
+    ctx.strokeRect(boxX, boxY, boxWidth, boxHeight)
+    
+    // Final time text
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 32px Arial'
+    ctx.fillText(`Time: ${formatTime(gameContextRef.current.time)}`, width / 2, height / 2 + 15)
+    
+    // Add best time information if available
+    if (gameContextRef.current.bestTime !== null) {
+      ctx.font = '18px Arial'
+      ctx.fillStyle = '#FFD700' // Gold for best time
+      ctx.fillText(`Best: ${formatTime(gameContextRef.current.bestTime)}`, width / 2, height / 2 + 60)
     }
     
+    // Restart prompt
     ctx.fillStyle = '#fff'
-    ctx.font = '18px Arial'
-    ctx.fillText('Press SPACE to restart', width / 2, height / 2 + 80)
+    ctx.font = '20px Arial'
     
     if (isMobile()) {
-      ctx.fillText('Tap screen to restart', width / 2, height / 2 + 110)
+      ctx.fillText('Tap to restart', width / 2, height - 60)
+    } else {
+      ctx.fillText('Press SPACE to restart', width / 2, height - 60)
     }
   }
   
@@ -590,19 +695,27 @@ export default function Game() {
     const width = canvas.width / window.devicePixelRatio
     const height = canvas.height / window.devicePixelRatio
     
-    ctx.fillStyle = '#000'
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
     ctx.fillRect(0, 0, width, height)
     
-    ctx.fillStyle = '#fff'
-    ctx.font = '36px Arial'
+    // Game over text
+    ctx.fillStyle = '#FF5C8D'
+    ctx.font = 'bold 60px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('Game Over', width / 2, height / 3)
+    ctx.fillText('GAME OVER', width / 2, height / 3)
     
-    ctx.font = '18px Arial'
-    ctx.fillText('Press SPACE to restart', width / 2, height / 2)
+    // Add some context
+    ctx.fillStyle = '#fff'
+    ctx.font = '24px Arial'
+    ctx.fillText('Your journey ends here', width / 2, height / 2)
     
+    // Restart prompt
+    ctx.font = '20px Arial'
     if (isMobile()) {
-      ctx.fillText('Tap screen to restart', width / 2, height / 2 + 30)
+      ctx.fillText('Tap to try again', width / 2, height / 2 + 80)
+    } else {
+      ctx.fillText('Press SPACE to try again', width / 2, height / 2 + 80)
     }
   }
   
