@@ -182,6 +182,8 @@ export default function Game() {
     width: 800, 
     height: 600 
   })
+  const [leaderboard, setLeaderboard] = useState<{name: string, time: number}[]>([])
+  const [checkpointsPassed, setCheckpointsPassed] = useState<boolean[]>([])
   
   // Input field reference
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -377,15 +379,6 @@ export default function Game() {
     gameContextRef.current.ctx = ctx
   }, [])
   
-  // Start game after name entry
-  const handleNameSubmit = useCallback(() => {
-    const name = playerName.trim() || "You"
-    gameContextRef.current.player.name = name
-    setGameState('ready')
-    gameContextRef.current.gameState = 'ready'
-    startGame()
-  }, [playerName, startGame])
-  
   // Start a new game
   const startGame = useCallback(() => {
     // Reset player state
@@ -426,6 +419,7 @@ export default function Game() {
     
     // Reset checkpoint tracking
     nextCheckpointRef.current = 0
+    setCheckpointsPassed(Array(track.checkpoints.length).fill(false))
     
     // Reset power-ups
     gameContextRef.current.powerUps = generatePowerUps()
@@ -445,6 +439,15 @@ export default function Game() {
       })
     }, 1000)
   }, [viewportSize.height, viewportSize.width])
+  
+  // Start game after name entry
+  const handleNameSubmit = useCallback(() => {
+    const name = playerName.trim() || "Player"
+    gameContextRef.current.player.name = name
+    setGameState('ready')
+    gameContextRef.current.gameState = 'ready'
+    startGame()
+  }, [playerName, startGame])
   
   // Game loop
   const gameLoop = useCallback(() => {
@@ -498,6 +501,7 @@ export default function Game() {
         break
       case 'ready':
         renderTrack(ctx)
+        renderPowerUps(ctx)
         renderEntities(ctx)
         // Draw egg finish area
         renderEggFinishArea(ctx)
@@ -541,7 +545,14 @@ export default function Game() {
             opponent.slowDownTime -= deltaTime * 1000
             opponent.maxSpeed = 150 // Slowed speed
           } else {
-            opponent.maxSpeed = 300 // Normal speed
+            // Set normal speed based on opponent type
+            if (opponent.name === 'Balaji' || opponent.name === 'Donovan') {
+              opponent.maxSpeed = 350; // Fast opponents
+            } else if (opponent.name === 'Dizzy' || opponent.name === 'Confused') {
+              opponent.maxSpeed = 200; // Slow special behavior opponents
+            } else {
+              opponent.maxSpeed = 300; // Normal speed
+            }
           }
           
           updateAIOpponent(opponent, deltaTime)
@@ -555,33 +566,46 @@ export default function Game() {
         // Update tail animations
         updateTailAnimation(deltaTime)
         
-        // Check checkpoints
+        // Check checkpoints - make them mandatory
         const currentCheckpoint = gameContextRef.current.track.checkpoints[nextCheckpointRef.current]
-        const nextCheckpointIndex = (nextCheckpointRef.current + 1) % gameContextRef.current.track.checkpoints.length
-        const nextCheckpoint = gameContextRef.current.track.checkpoints[nextCheckpointIndex]
         
-        if (checkCheckpointCollision(
-          gameContextRef.current.player,
-          nextCheckpointRef.current,
-          currentCheckpoint,
-          nextCheckpoint,
-          checkpointRadius
-        )) {
-          nextCheckpointRef.current = nextCheckpointIndex
+        // Check if player reached the current checkpoint
+        const distanceToCheckpoint = Math.sqrt(
+          Math.pow(gameContextRef.current.player.position.x + gameContextRef.current.player.width / 2 - currentCheckpoint.x, 2) +
+          Math.pow(gameContextRef.current.player.position.y + gameContextRef.current.player.height / 2 - currentCheckpoint.y, 2)
+        )
+        
+        if (distanceToCheckpoint < checkpointRadius) {
+          // Mark the checkpoint as passed
+          const newCheckpointsPassed = [...checkpointsPassed];
+          newCheckpointsPassed[nextCheckpointRef.current] = true;
+          setCheckpointsPassed(newCheckpointsPassed);
+          
+          // Move to next checkpoint
+          nextCheckpointRef.current = (nextCheckpointRef.current + 1) % gameContextRef.current.track.checkpoints.length
           
           // If we've completed a lap
           if (nextCheckpointRef.current === 0) {
-            gameContextRef.current.player.laps++
-            gameContextRef.current.player.lapTimes.push(gameContextRef.current.player.currentLapTime)
-            
-            // Update best lap time
-            if (gameContextRef.current.player.bestLapTime === null || 
-                gameContextRef.current.player.currentLapTime < gameContextRef.current.player.bestLapTime) {
-              gameContextRef.current.player.bestLapTime = gameContextRef.current.player.currentLapTime
+            // Check if all checkpoints were passed
+            if (newCheckpointsPassed.every(passed => passed)) {
+              gameContextRef.current.player.laps++
+              gameContextRef.current.player.lapTimes.push(gameContextRef.current.player.currentLapTime)
+              
+              // Update best lap time
+              if (gameContextRef.current.player.bestLapTime === null || 
+                  gameContextRef.current.player.currentLapTime < gameContextRef.current.player.bestLapTime) {
+                gameContextRef.current.player.bestLapTime = gameContextRef.current.player.currentLapTime
+              }
+              
+              // Reset current lap time and checkpoint tracking
+              gameContextRef.current.player.currentLapTime = 0
+              setCheckpointsPassed(Array(track.checkpoints.length).fill(false))
+            } else {
+              // Player tried to skip checkpoints, don't count this lap
+              // Send them back to first checkpoint
+              nextCheckpointRef.current = 0
+              setCheckpointsPassed(Array(track.checkpoints.length).fill(false))
             }
-            
-            // Reset current lap time
-            gameContextRef.current.player.currentLapTime = 0
           }
         }
         
@@ -591,7 +615,7 @@ export default function Game() {
           Math.pow(gameContextRef.current.player.position.y + gameContextRef.current.player.height / 2 - eggPosition.y, 2)
         )
         
-        if (distanceToEgg < eggRadius && nextCheckpointRef.current >= gameContextRef.current.track.checkpoints.length - 1) {
+        if (distanceToEgg < eggRadius && checkpointsPassed.every(passed => passed)) {
           // Player has reached the egg after passing all checkpoints
           setGameState('finished')
           gameContextRef.current.gameState = 'finished'
@@ -601,6 +625,19 @@ export default function Game() {
             setBestTime(gameContextRef.current.time)
             gameContextRef.current.bestTime = gameContextRef.current.time
           }
+          
+          // Update leaderboard
+          const newEntry = {
+            name: gameContextRef.current.player.name || "Player",
+            time: gameContextRef.current.time
+          }
+          
+          // Update leaderboard
+          const newLeaderboard = [...leaderboard, newEntry]
+            .sort((a, b) => a.time - b.time)
+            .slice(0, 10); // Keep only top 10
+            
+          setLeaderboard(newLeaderboard);
         }
         
         // Render everything
@@ -615,6 +652,7 @@ export default function Game() {
         break
       case 'finished':
         renderTrack(ctx)
+        renderPowerUps(ctx)
         renderEggFinishArea(ctx)
         renderEntities(ctx)
         // Reset transform for UI
@@ -633,7 +671,7 @@ export default function Game() {
     }
     
     requestAnimationFrameRef.current = requestAnimationFrame(gameLoop)
-  }, [showJoystick, bestTime, cameraPosition, viewportSize.height, viewportSize.width])
+  }, [showJoystick, bestTime, cameraPosition, viewportSize.height, viewportSize.width, checkpointsPassed, leaderboard])
   
   // Update power-ups (respawn collected ones)
   const updatePowerUps = (deltaTime: number) => {
@@ -1138,41 +1176,110 @@ export default function Game() {
   
   const renderHUD = (ctx: CanvasRenderingContext2D) => {
     // Draw semi-transparent background for better readability
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillRect(0, 0, 160, 100)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    ctx.fillRect(0, 0, 200, 150)
     
     ctx.fillStyle = '#fff'
     ctx.font = '16px Arial'
     ctx.textAlign = 'left'
     
     // Draw lap counter
-    ctx.fillText(`Lap: ${gameContextRef.current.player.laps + 1}/3`, 10, 25)
+    ctx.fillText(`Lap Progress:`, 10, 25)
+    
+    // Draw checkpoint indicators
+    const checkpointBoxWidth = 15
+    const checkpointBoxGap = 5
+    const startX = 10
+    const startY = 35
+    
+    checkpointsPassed.forEach((passed, index) => {
+      // Draw box outline
+      ctx.strokeStyle = passed ? '#33FF33' : '#FFFFFF'
+      ctx.lineWidth = 2
+      ctx.strokeRect(
+        startX + index * (checkpointBoxWidth + checkpointBoxGap),
+        startY,
+        checkpointBoxWidth,
+        checkpointBoxWidth
+      )
+      
+      // Fill if passed
+      if (passed) {
+        ctx.fillStyle = 'rgba(50, 255, 50, 0.5)'
+        ctx.fillRect(
+          startX + index * (checkpointBoxWidth + checkpointBoxGap) + 2,
+          startY + 2,
+          checkpointBoxWidth - 4,
+          checkpointBoxWidth - 4
+        )
+      }
+      
+      // Highlight current checkpoint
+      if (index === nextCheckpointRef.current) {
+        ctx.strokeStyle = '#FFFF00'
+        ctx.lineWidth = 3
+        ctx.strokeRect(
+          startX + index * (checkpointBoxWidth + checkpointBoxGap) - 2,
+          startY - 2,
+          checkpointBoxWidth + 4,
+          checkpointBoxWidth + 4
+        )
+      }
+    })
     
     // Draw timer
-    ctx.fillText(`Time: ${formatTime(gameContextRef.current.time)}`, 10, 50)
+    ctx.fillStyle = '#fff'
+    ctx.fillText(`Time: ${formatTime(gameContextRef.current.time)}`, 10, 75)
     
     // Draw current lap time
-    ctx.fillText(`Lap Time: ${formatTime(gameContextRef.current.player.currentLapTime)}`, 10, 75)
+    ctx.fillText(`Lap Time: ${formatTime(gameContextRef.current.player.currentLapTime)}`, 10, 100)
     
     // Draw best lap time if available
     if (gameContextRef.current.player.bestLapTime !== null) {
-      ctx.fillRect(0, 100, 160, 25)
+      ctx.fillRect(0, 150, 200, 25)
       ctx.fillStyle = '#FFFF00' // Yellow for best time
-      ctx.fillText(`Best Lap: ${formatTime(gameContextRef.current.player.bestLapTime)}`, 10, 120)
+      ctx.fillText(`Best Lap: ${formatTime(gameContextRef.current.player.bestLapTime)}`, 10, 170)
     }
     
-    // Add position indicator (simplified)
+    // Show player status effects
+    if (gameContextRef.current.player.speedBoostTime > 0) {
+      ctx.fillStyle = '#00AAFF'
+      ctx.fillText(`BOOST: ${Math.ceil(gameContextRef.current.player.speedBoostTime / 1000)}s`, 10, 125)
+    } else if (gameContextRef.current.player.slowDownTime > 0) {
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillText(`SLOW: ${Math.ceil(gameContextRef.current.player.slowDownTime / 1000)}s`, 10, 125)
+    }
+    
+    // Add position indicator
     const positions = [...gameContextRef.current.opponents, gameContextRef.current.player]
-      .sort((a, b) => b.laps - a.laps)
+      .sort((a, b) => {
+        // Compare by checkpoints and progress
+        if (b.laps !== a.laps) return b.laps - a.laps;
+        
+        // If at same checkpoint, use distance to next checkpoint
+        const nextCheckpoint = gameContextRef.current.track.checkpoints[nextCheckpointRef.current];
+        
+        const distA = Math.sqrt(
+          Math.pow(a.position.x - nextCheckpoint.x, 2) + 
+          Math.pow(a.position.y - nextCheckpoint.y, 2)
+        );
+        
+        const distB = Math.sqrt(
+          Math.pow(b.position.x - nextCheckpoint.x, 2) + 
+          Math.pow(b.position.y - nextCheckpoint.y, 2)
+        );
+        
+        return distA - distB;
+      });
     
     const playerRank = positions.findIndex(entity => entity.id === gameContextRef.current.player.id) + 1
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillRect(track.width - 80, 0, 80, 40)
-    ctx.fillStyle = playerRank === 1 ? '#FFD700' : '#fff' // Gold for 1st place
-    ctx.font = '18px Arial'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    ctx.fillRect(ctx.canvas.width / window.devicePixelRatio - 100, 0, 100, 50)
+    ctx.fillStyle = getPositionColor(playerRank)
+    ctx.font = '24px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText(`${playerRank}${getRankSuffix(playerRank)} Place`, track.width - 40, 25)
+    ctx.fillText(`${playerRank}${getRankSuffix(playerRank)}`, ctx.canvas.width / window.devicePixelRatio - 50, 30)
   }
   
   // Helper function for rank suffixes
@@ -1181,6 +1288,20 @@ export default function Game() {
     if (rank === 2) return 'nd'
     if (rank === 3) return 'rd'
     return 'th'
+  }
+  
+  // Helper function for position colors
+  const getPositionColor = (position: number): string => {
+    switch (position) {
+      case 1:
+        return '#FFD700' // Gold
+      case 2:
+        return '#C0C0C0' // Silver
+      case 3:
+        return '#CD7F32' // Bronze
+      default:
+        return '#FFFFFF' // White
+    }
   }
   
   const renderNameEntryScreen = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
@@ -1405,256 +1526,329 @@ export default function Game() {
     const width = canvas.width / window.devicePixelRatio
     const height = canvas.height / window.devicePixelRatio
     
+    // Create a celebration animation
+    const currentTime = Date.now()
+    const animationStartTime = currentTime % 10000 // Reset every 10 seconds
+    const animationProgress = animationStartTime / 10000
+    
     // Semi-transparent overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
     ctx.fillRect(0, 0, width, height)
+    
+    // Draw confetti particles
+    for (let i = 0; i < 100; i++) {
+      const x = (Math.sin(currentTime / 1000 + i) * 0.5 + 0.5) * width
+      const y = ((currentTime / 1000 + i * 0.1) % 1) * height
+      const size = 5 + Math.sin(currentTime / 500 + i) * 3
+      const hue = (i * 3.6 + currentTime / 50) % 360
+      
+      ctx.fillStyle = `hsla(${hue}, 100%, 60%, 0.8)`
+      ctx.beginPath()
+      
+      // Alternate between different confetti shapes
+      if (i % 3 === 0) {
+        // Circle
+        ctx.arc(x, y, size, 0, Math.PI * 2)
+      } else if (i % 3 === 1) {
+        // Square
+        ctx.rect(x - size / 2, y - size / 2, size, size)
+      } else {
+        // Triangle
+        ctx.moveTo(x, y - size)
+        ctx.lineTo(x + size * 0.866, y + size * 0.5)
+        ctx.lineTo(x - size * 0.866, y + size * 0.5)
+        ctx.closePath()
+      }
+      
+      ctx.fill()
+    }
     
     // Create a light ray effect behind the text
     const centerX = width / 2
-    const centerY = height / 3
+    const centerY = height / 5
     const outerRadius = Math.max(width, height)
     
     const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, outerRadius)
-    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)')
-    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.1)')
+    gradient.addColorStop(0, 'rgba(255, 255, 255, 0.4)')
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0.2)')
     gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
     
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
     
-    // Main title
-    ctx.fillStyle = '#fff'
-    const titleText = gameContextRef.current.bestTime !== null && 
-                     gameContextRef.current.time <= gameContextRef.current.bestTime
-                     ? 'NEW RECORD!' 
-                     : 'RACE COMPLETE!'
-    
-    ctx.font = 'bold 48px Arial'
+    // Main title with pulsing animation
+    const pulseSize = Math.sin(currentTime / 200) * 5
+    ctx.fillStyle = '#FFDD33'
+    ctx.font = `bold ${48 + pulseSize}px Arial`
     ctx.textAlign = 'center'
-    ctx.fillText(titleText, width / 2, height / 3)
+    ctx.fillText('CONGRATULATIONS!', width / 2, height / 5)
     
-    // Create a stylized box for the time
-    const boxWidth = 300
-    const boxHeight = 80
-    const boxX = width / 2 - boxWidth / 2
-    const boxY = height / 2 - boxHeight / 2
+    // Draw a trophy icon
+    const trophyX = width / 2
+    const trophyY = height / 3
+    const trophySize = 40 + Math.sin(currentTime / 500) * 5
+    
+    // Trophy cup
+    ctx.fillStyle = '#FFD700'
+    ctx.beginPath()
+    ctx.arc(trophyX, trophyY - trophySize / 2, trophySize / 2, 0, Math.PI, true)
+    ctx.fill()
+    
+    // Trophy stem and base
+    ctx.fillRect(trophyX - trophySize / 10, trophyY - trophySize / 2, trophySize / 5, trophySize / 1.5)
+    ctx.fillRect(trophyX - trophySize / 2, trophyY + trophySize / 4, trophySize, trophySize / 8)
+    
+    // Trophy handles
+    ctx.beginPath()
+    ctx.arc(trophyX - trophySize / 2, trophyY - trophySize / 3, trophySize / 4, Math.PI / 2, -Math.PI / 2, true)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(trophyX + trophySize / 2, trophyY - trophySize / 3, trophySize / 4, -Math.PI / 2, Math.PI / 2, true)
+    ctx.stroke()
+    
+    // Player time
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 32px Arial'
+    ctx.fillText(`Your Time: ${formatTime(gameContextRef.current.time)}`, width / 2, height / 2)
+    
+    // Leaderboard background
+    const leaderboardWidth = width * 0.7
+    const leaderboardHeight = height * 0.35
+    const leaderboardX = width / 2 - leaderboardWidth / 2
+    const leaderboardY = height / 2 + 20
     
     // Box shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
-    ctx.fillRect(boxX + 5, boxY + 5, boxWidth, boxHeight)
+    ctx.fillRect(leaderboardX + 5, leaderboardY + 5, leaderboardWidth, leaderboardHeight)
     
     // Box background
-    const boxGradient = ctx.createLinearGradient(boxX, boxY, boxX, boxY + boxHeight)
-    boxGradient.addColorStop(0, '#FF90B3')
-    boxGradient.addColorStop(1, '#FF5C8D')
+    const boxGradient = ctx.createLinearGradient(leaderboardX, leaderboardY, leaderboardX, leaderboardY + leaderboardHeight)
+    boxGradient.addColorStop(0, '#333344')
+    boxGradient.addColorStop(1, '#222233')
     ctx.fillStyle = boxGradient
-    ctx.fillRect(boxX, boxY, boxWidth, boxHeight)
+    ctx.fillRect(leaderboardX, leaderboardY, leaderboardWidth, leaderboardHeight)
     
     // Box border
-    ctx.strokeStyle = '#ffffff'
+    ctx.strokeStyle = '#5555AA'
     ctx.lineWidth = 2
-    ctx.strokeRect(boxX, boxY, boxWidth, boxHeight)
+    ctx.strokeRect(leaderboardX, leaderboardY, leaderboardWidth, leaderboardHeight)
     
-    // Final time text
-    ctx.fillStyle = '#fff'
-    ctx.font = 'bold 32px Arial'
-    ctx.fillText(`Time: ${formatTime(gameContextRef.current.time)}`, width / 2, height / 2 + 15)
+    // Leaderboard title
+    ctx.fillStyle = '#FFDD33'
+    ctx.font = 'bold 24px Arial'
+    ctx.fillText('LEADERBOARD', width / 2, leaderboardY + 30)
     
-    // Add best time information if available
-    if (gameContextRef.current.bestTime !== null) {
-      ctx.font = '18px Arial'
-      ctx.fillStyle = '#FFD700' // Gold for best time
-      ctx.fillText(`Best: ${formatTime(gameContextRef.current.bestTime)}`, width / 2, height / 2 + 60)
+    // Leaderboard entries
+    const combinedLeaderboard = [...leaderboard]
+    
+    // Add current entry if not already in leaderboard
+    const playerTime = gameContextRef.current.time
+    if (!combinedLeaderboard.some(entry => entry.name === gameContextRef.current.player.name && entry.time === playerTime)) {
+      combinedLeaderboard.push({
+        name: gameContextRef.current.player.name || "Player",
+        time: playerTime
+      })
     }
     
-    // Restart prompt
+    // Sort and limit to top 5 for display
+    const displayLeaderboard = combinedLeaderboard
+      .sort((a, b) => a.time - b.time)
+      .slice(0, 5)
+    
+    // Draw the entries
+    ctx.textAlign = 'left'
+    ctx.font = '18px Arial'
+    
+    displayLeaderboard.forEach((entry, index) => {
+      const isCurrentPlayer = entry.name === gameContextRef.current.player.name && entry.time === playerTime
+      
+      // Highlight current player
+      if (isCurrentPlayer) {
+        ctx.fillStyle = 'rgba(255, 220, 80, 0.3)'
+        ctx.fillRect(
+          leaderboardX + 10, 
+          leaderboardY + 50 + index * 30 - 20, 
+          leaderboardWidth - 20, 
+          25
+        )
+        ctx.fillStyle = '#FFDD33'
+      } else {
+        ctx.fillStyle = '#FFFFFF'
+      }
+      
+      // Rank
+      ctx.fillText(`${index + 1}.`, leaderboardX + 20, leaderboardY + 50 + index * 30)
+      
+      // Name
+      ctx.fillText(entry.name, leaderboardX + 60, leaderboardY + 50 + index * 30)
+      
+      // Time
+      ctx.textAlign = 'right'
+      ctx.fillText(formatTime(entry.time), leaderboardX + leaderboardWidth - 20, leaderboardY + 50 + index * 30)
+      
+      ctx.textAlign = 'left'
+    })
+    
+    // Play again button
+    const buttonWidth = 150
+    const buttonHeight = 40
+    const buttonX = width / 2 - buttonWidth / 2
+    const buttonY = height - 60
+    
+    // Button shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
+    ctx.fillRect(buttonX + 3, buttonY + 3, buttonWidth, buttonHeight)
+    
+    // Button background
+    const buttonGradient = ctx.createLinearGradient(buttonX, buttonY, buttonX, buttonY + buttonHeight)
+    buttonGradient.addColorStop(0, '#FF5C8D')
+    buttonGradient.addColorStop(1, '#FF4070')
+    ctx.fillStyle = buttonGradient
+    ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight)
+    
+    // Button border
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 2
+    ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight)
+    
+    // Button text
     ctx.fillStyle = '#fff'
+    ctx.textAlign = 'center'
     ctx.font = '20px Arial'
-    
-    if (isMobile()) {
-      ctx.fillText('Tap to restart', width / 2, height - 60)
-    } else {
-      ctx.fillText('Press SPACE to restart', width / 2, height - 60)
-    }
+    ctx.fillText('PLAY AGAIN', buttonX + buttonWidth / 2, buttonY + 27)
   }
   
+  // Helper function to shade a color (used for gradients)
+  const shadeColor = (color: string, percent: number): string => {
+    let R = parseInt(color.substring(1, 3), 16)
+    let G = parseInt(color.substring(3, 5), 16)
+    let B = parseInt(color.substring(5, 7), 16)
+
+    R = Math.floor(R * (100 + percent) / 100)
+    G = Math.floor(G * (100 + percent) / 100)
+    B = Math.floor(B * (100 + percent) / 100)
+
+    R = R < 255 ? R : 255
+    G = G < 255 ? G : 255
+    B = B < 255 ? B : 255
+
+    const RR = R.toString(16).length === 1 ? '0' + R.toString(16) : R.toString(16)
+    const GG = G.toString(16).length === 1 ? '0' + G.toString(16) : G.toString(16)
+    const BB = B.toString(16).length === 1 ? '0' + B.toString(16) : B.toString(16)
+
+    return '#' + RR + GG + BB
+  }
+  
+  // Render the power-ups
+  const renderPowerUps = (ctx: CanvasRenderingContext2D) => {
+    gameContextRef.current.powerUps.forEach(powerUp => {
+      if (powerUp.collected) return // Don't render collected power-ups
+      
+      if (powerUp.type === 'boost') {
+        // Speed boost pill (blue)
+        const pillGradient = ctx.createRadialGradient(
+          powerUp.position.x, powerUp.position.y, 0,
+          powerUp.position.x, powerUp.position.y, powerUp.radius
+        )
+        pillGradient.addColorStop(0, '#00DDFF')
+        pillGradient.addColorStop(0.7, '#00AAFF')
+        pillGradient.addColorStop(1, '#0088DD')
+        
+        ctx.fillStyle = pillGradient
+        ctx.beginPath()
+        ctx.arc(powerUp.position.x, powerUp.position.y, powerUp.radius, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // Add a subtle glow
+        const glowRadius = powerUp.radius * 1.3
+        
+        const glowGradient = ctx.createRadialGradient(
+          powerUp.position.x, powerUp.position.y, powerUp.radius * 0.8,
+          powerUp.position.x, powerUp.position.y, glowRadius
+        )
+        glowGradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)')
+        glowGradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+        
+        ctx.fillStyle = glowGradient
+        ctx.beginPath()
+        ctx.arc(powerUp.position.x, powerUp.position.y, glowRadius, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // Draw a lightning bolt symbol
+        ctx.strokeStyle = '#FFFFFF'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        
+        // Zigzag lightning bolt
+        ctx.moveTo(powerUp.position.x - powerUp.radius * 0.3, powerUp.position.y - powerUp.radius * 0.4)
+        ctx.lineTo(powerUp.position.x, powerUp.position.y - powerUp.radius * 0.1)
+        ctx.lineTo(powerUp.position.x - powerUp.radius * 0.3, powerUp.position.y + powerUp.radius * 0.1)
+        ctx.lineTo(powerUp.position.x + powerUp.radius * 0.3, powerUp.position.y + powerUp.radius * 0.4)
+        
+        ctx.stroke()
+      } else if (powerUp.type === 'slowdown') {
+        // Slowdown pill (white)
+        const pillGradient = ctx.createRadialGradient(
+          powerUp.position.x, powerUp.position.y, 0,
+          powerUp.position.x, powerUp.position.y, powerUp.radius
+        )
+        pillGradient.addColorStop(0, '#FFFFFF')
+        pillGradient.addColorStop(0.7, '#F0F0F0')
+        pillGradient.addColorStop(1, '#E0E0E0')
+        
+        ctx.fillStyle = pillGradient
+        ctx.beginPath()
+        ctx.arc(powerUp.position.x, powerUp.position.y, powerUp.radius, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // Add a subtle glow
+        const glowRadius = powerUp.radius * 1.3
+        
+        const glowGradient = ctx.createRadialGradient(
+          powerUp.position.x, powerUp.position.y, powerUp.radius * 0.8,
+          powerUp.position.x, powerUp.position.y, glowRadius
+        )
+        glowGradient.addColorStop(0, 'rgba(255, 255, 255, 0.5)')
+        glowGradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+        
+        ctx.fillStyle = glowGradient
+        ctx.beginPath()
+        ctx.arc(powerUp.position.x, powerUp.position.y, glowRadius, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // Draw a slowdown symbol (X)
+        ctx.strokeStyle = '#FF0000'
+        ctx.lineWidth = 2
+        ctx.beginPath()
+        ctx.moveTo(powerUp.position.x - powerUp.radius * 0.3, powerUp.position.y - powerUp.radius * 0.3)
+        ctx.lineTo(powerUp.position.x + powerUp.radius * 0.3, powerUp.position.y + powerUp.radius * 0.3)
+        ctx.stroke()
+        
+        ctx.beginPath()
+        ctx.moveTo(powerUp.position.x + powerUp.radius * 0.3, powerUp.position.y - powerUp.radius * 0.3)
+        ctx.lineTo(powerUp.position.x - powerUp.radius * 0.3, powerUp.position.y + powerUp.radius * 0.3)
+        ctx.stroke()
+      }
+    })
+  }
+  
+  // Render game over screen
   const renderGameOver = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     const width = canvas.width / window.devicePixelRatio
     const height = canvas.height / window.devicePixelRatio
     
-    // Dark overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
     ctx.fillRect(0, 0, width, height)
     
-    // Game over text
-    ctx.fillStyle = '#FF5C8D'
-    ctx.font = 'bold 60px Arial'
+    ctx.fillStyle = '#ff4444'
+    ctx.font = 'bold 48px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('GAME OVER', width / 2, height / 3)
+    ctx.fillText('GAME OVER', width / 2, height / 2)
     
-    // Add some context
-    ctx.fillStyle = '#fff'
+    ctx.fillStyle = '#ffffff'
     ctx.font = '24px Arial'
-    ctx.fillText('Your journey ends here', width / 2, height / 2)
-    
-    // Restart prompt
-    ctx.font = '20px Arial'
-    if (isMobile()) {
-      ctx.fillText('Tap to try again', width / 2, height / 2 + 80)
-    } else {
-      ctx.fillText('Press SPACE to try again', width / 2, height / 2 + 80)
-    }
+    ctx.fillText('Press SPACE to play again', width / 2, height / 2 + 60)
   }
-  
-  // Helper function to darken/lighten colors
-  const shadeColor = (color: string, percent: number): string => {
-    if (color.startsWith('#')) {
-      let R = parseInt(color.substring(1, 3), 16);
-      let G = parseInt(color.substring(3, 5), 16);
-      let B = parseInt(color.substring(5, 7), 16);
-
-      R = Math.floor(R * (100 + percent) / 100);
-      G = Math.floor(G * (100 + percent) / 100);
-      B = Math.floor(B * (100 + percent) / 100);
-
-      R = (R < 255) ? R : 255;
-      G = (G < 255) ? G : 255;
-      B = (B < 255) ? B : 255;
-
-      R = (R > 0) ? R : 0;
-      G = (G > 0) ? G : 0;
-      B = (B > 0) ? B : 0;
-
-      return `#${(R.toString(16).padStart(2, '0'))
-        }${G.toString(16).padStart(2, '0')
-        }${B.toString(16).padStart(2, '0')}`;
-    } else {
-      return color;
-    }
-  };
-  
-  // Handle name input
-  const handleNameInput = useCallback((e: KeyboardEvent) => {
-    if (gameContextRef.current.gameState !== 'nameEntry') return
-    
-    if (e.key === 'Backspace') {
-      setPlayerName(prev => prev.slice(0, -1))
-    } else if (e.key === 'Enter') {
-      handleNameSubmit()
-    } else if (e.key.length === 1 && playerName.length < 15) {
-      setPlayerName(prev => prev + e.key)
-    }
-  }, [playerName, handleNameSubmit])
-  
-  // Handle touch for mobile devices
-  const handleTouch = useCallback((e: React.MouseEvent) => {
-    // Get canvas element and dimensions
-    const canvas = gameContextRef.current.canvas
-    if (!canvas) return
-    
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    
-    // Calculate click position
-    const x = (e.clientX - rect.left) * scaleX / window.devicePixelRatio
-    const y = (e.clientY - rect.top) * scaleY / window.devicePixelRatio
-    
-    if (gameContextRef.current.gameState === 'title') {
-      // Check if play button was clicked
-      const width = canvas.width / window.devicePixelRatio
-      const height = canvas.height / window.devicePixelRatio
-      
-      const buttonWidth = 200
-      const buttonHeight = 60
-      const buttonX = width / 2 - buttonWidth / 2
-      const buttonY = height / 2 - 30
-      
-      if (x >= buttonX && x <= buttonX + buttonWidth && 
-          y >= buttonY && y <= buttonY + buttonHeight) {
-        setGameState('nameEntry')
-        gameContextRef.current.gameState = 'nameEntry'
-        setTimeout(() => setNameInputActive(true), 100)
-      }
-    } else if (gameContextRef.current.gameState === 'nameEntry') {
-      // Check if start button was clicked
-      const width = canvas.width / window.devicePixelRatio
-      const height = canvas.height / window.devicePixelRatio
-      
-      const buttonWidth = 150
-      const buttonHeight = 40
-      const buttonX = width / 2 - buttonWidth / 2
-      const buttonY = height / 2 + 50
-      
-      if (x >= buttonX && x <= buttonX + buttonWidth && 
-          y >= buttonY && y <= buttonY + buttonHeight) {
-        handleNameSubmit()
-      }
-      
-      // Or if input box was clicked, focus it
-      const inputBoxWidth = 300
-      const inputBoxHeight = 50
-      const inputBoxX = width / 2 - inputBoxWidth / 2
-      const inputBoxY = height / 2 - 30
-      
-      if (x >= inputBoxX && x <= inputBoxX + inputBoxWidth && 
-          y >= inputBoxY && y <= inputBoxY + inputBoxHeight) {
-        setNameInputActive(true)
-      }
-    } else if (gameContextRef.current.gameState === 'finished' || 
-               gameContextRef.current.gameState === 'gameOver') {
-      setGameState('title')
-      gameContextRef.current.gameState = 'title'
-    }
-  }, [handleNameSubmit])
-  
-  // Update viewport size on window resize
-  useEffect(() => {
-    const handleResize = () => {
-      setViewportSize({
-        width: Math.min(800, window.innerWidth),
-        height: Math.min(600, window.innerHeight)
-      })
-    }
-    
-    // Set initial size
-    handleResize()
-    
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-  
-  // Setup event listeners and game loop
-  useEffect(() => {
-    // Check if on mobile and show joystick if needed
-    setShowJoystick(isMobile())
-    
-    // Add event listeners for keyboard controls
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('keypress', handleNameInput)
-    
-    // Start game loop
-    requestAnimationFrameRef.current = requestAnimationFrame(gameLoop)
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('keyup', handleKeyUp)
-      window.removeEventListener('keypress', handleNameInput)
-      cancelAnimationFrame(requestAnimationFrameRef.current)
-    }
-  }, [gameLoop, handleKeyDown, handleKeyUp, handleNameInput])
-  
-  // Handle name input active state
-  useEffect(() => {
-    // Create a hidden input element to capture mobile keyboard input
-    if (nameInputActive && gameContextRef.current.gameState === 'nameEntry') {
-      // If we're using a real input, focus it
-      if (nameInputRef.current) {
-        nameInputRef.current.focus()
-      }
-    }
-  }, [nameInputActive])
   
   return (
     <div 
