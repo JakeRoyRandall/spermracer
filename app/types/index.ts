@@ -19,6 +19,7 @@ export interface Entity {
 }
 
 export interface Player extends Entity {
+  name?: string
   control: {
     up: boolean
     down: boolean
@@ -32,6 +33,7 @@ export interface Player extends Entity {
 }
 
 export interface AIOpponent extends Entity {
+  name: string
   waypoints: Vector2D[]
   currentWaypoint: number
   difficulty: number

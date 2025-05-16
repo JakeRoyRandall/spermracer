@@ -67,6 +67,7 @@ export default function Game() {
     gameState: 'title',
     player: {
       id: generateId(),
+      name: 'You',
       position: { x: trackWidth / 2 - 10, y: trackWallThickness * 3 },
       velocity: { x: 0, y: 0 },
       acceleration: { x: 0, y: 0 },
@@ -489,17 +490,44 @@ export default function Game() {
       // Translate to center of opponent
       const centerX = opponent.position.x + opponent.width / 2;
       const centerY = opponent.position.y + opponent.height / 2;
+      
+      // Calculate head radius once
+      const opponentHeadRadius = opponent.width / 1.5;
+      
+      // Draw name above the opponent
+      ctx.font = '10px Arial';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      
+      // Draw name background for better readability
+      const nameWidth = ctx.measureText(opponent.name).width + 4;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(
+        centerX - nameWidth / 2, 
+        centerY - opponentHeadRadius * 2.5 - 12, 
+        nameWidth, 
+        14
+      );
+      
+      // Draw name text
+      ctx.fillStyle = opponent.color;
+      ctx.fillText(
+        opponent.name, 
+        centerX, 
+        centerY - opponentHeadRadius * 2.5
+      );
+      
       ctx.translate(centerX, centerY);
       
       // Rotate based on opponent's rotation
       ctx.rotate((opponent.rotation * Math.PI) / 180);
       
       // Draw opponent "sperm" body
-      const headRadius = opponent.width / 1.5;
       
       // Draw the tail (wiggly)
       ctx.strokeStyle = opponent.color;
-      ctx.lineWidth = headRadius / 2.5;
+      ctx.lineWidth = opponentHeadRadius / 2.5;
       ctx.lineCap = 'round';
       
       // Get position data for this opponent
@@ -508,29 +536,29 @@ export default function Game() {
         const positions = opponentTail.lastPositions;
         
         ctx.beginPath();
-        // Start from the back of the head
-        ctx.moveTo(-headRadius / 2, 0);
-        
-        // Create a path through previous positions with wave effect
-        for (let i = 0; i < positions.length - 1; i++) {
-          // Add a sine wave effect to the tail
-          const waveAmplitude = headRadius / 3 * (1 - i / positions.length);
-          const wavePhase = tailWaveRef.current.offset + i * 1.5;
-          const waveY = Math.sin(wavePhase) * waveAmplitude;
+                  // Start from the back of the head
+          ctx.moveTo(-opponentHeadRadius / 2, 0);
           
-          // Draw tail segment
-          const segmentX = -headRadius - (i + 1) * headRadius / 2;
-          const segmentY = waveY;
+          // Create a path through previous positions with wave effect
+          for (let i = 0; i < positions.length - 1; i++) {
+            // Add a sine wave effect to the tail
+            const waveAmplitude = opponentHeadRadius / 3 * (1 - i / positions.length);
+            const wavePhase = tailWaveRef.current.offset + i * 1.5;
+            const waveY = Math.sin(wavePhase) * waveAmplitude;
+            
+            // Draw tail segment
+            const segmentX = -opponentHeadRadius - (i + 1) * opponentHeadRadius / 2;
+            const segmentY = waveY;
+            
+            ctx.lineTo(segmentX, segmentY);
+          }
           
-          ctx.lineTo(segmentX, segmentY);
-        }
-        
-        // Taper the tail width
-        ctx.strokeStyle = opponent.color;
-        const gradient = ctx.createLinearGradient(-headRadius / 2, 0, -headRadius * 5, 0);
-        gradient.addColorStop(0, opponent.color);
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.strokeStyle = gradient;
+          // Taper the tail width
+          ctx.strokeStyle = opponent.color;
+          const gradient = ctx.createLinearGradient(-opponentHeadRadius / 2, 0, -opponentHeadRadius * 5, 0);
+          gradient.addColorStop(0, opponent.color);
+          gradient.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.strokeStyle = gradient;
         
         ctx.stroke();
       }
@@ -555,6 +583,34 @@ export default function Game() {
     // Translate to center of player
     const playerCenterX = player.position.x + player.width / 2;
     const playerCenterY = player.position.y + player.height / 2;
+    
+    // Calculate head radius for player
+    const playerHeadRadius = player.width / 1.5;
+    
+    // Draw name above the player
+    ctx.font = '10px Arial';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    
+    // Draw name background for better readability
+    const nameWidth = ctx.measureText(player.name || 'You').width + 4;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(
+      playerCenterX - nameWidth / 2, 
+      playerCenterY - playerHeadRadius * 2.5 - 12, 
+      nameWidth, 
+      14
+    );
+    
+    // Draw name text
+    ctx.fillStyle = player.color;
+    ctx.fillText(
+      player.name || 'You', 
+      playerCenterX, 
+      playerCenterY - playerHeadRadius * 2.5
+    );
+    
     ctx.translate(playerCenterX, playerCenterY);
     
     // Rotate based on player's rotation
