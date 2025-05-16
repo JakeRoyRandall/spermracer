@@ -672,7 +672,7 @@ export default function Game() {
     }
     
     requestAnimationFrameRef.current = requestAnimationFrame(gameLoop)
-  }, [showJoystick, bestTime, cameraPosition, viewportSize.height, viewportSize.width, checkpointsPassed, leaderboard])
+  }, [showJoystick, bestTime, cameraPosition, viewportSize.height, viewportSize.width])
   
   // Update power-ups (respawn collected ones)
   const updatePowerUps = (deltaTime: number) => {
@@ -1883,38 +1883,53 @@ export default function Game() {
     ctx.fillText('Press SPACE to play again', width / 2, height / 2 + 60)
   }
   
-  // Handle touch input for mobile
+  // Handle touch input for mobile and click for desktop
   const handleTouch = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Check if we're on a mobile device
-    if (!isMobile()) return
-    
-    if (gameContextRef.current.gameState === 'ready' || 
-        gameContextRef.current.gameState === 'racing') {
+    // Always enable joystick on mobile when racing
+    if (isMobile() && (gameContextRef.current.gameState === 'ready' || 
+        gameContextRef.current.gameState === 'racing')) {
       setShowJoystick(true)
     }
+    
+    const canvas = gameContextRef.current.canvas
+    if (!canvas) return
+    
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
     
     // Handle game state changes on touch
     switch (gameContextRef.current.gameState) {
       case 'title':
-        setGameState('nameEntry')
-        gameContextRef.current.gameState = 'nameEntry'
-        setTimeout(() => setNameInputActive(true), 100)
+        // Check if click is on play button
+        const titleButtonWidth = 200
+        const titleButtonHeight = 60
+        const titleButtonX = (canvas.width / window.devicePixelRatio) / 2 - titleButtonWidth / 2
+        const titleButtonY = (canvas.height / window.devicePixelRatio) / 2 - 30
+        
+        if (x >= titleButtonX && x <= titleButtonX + titleButtonWidth &&
+            y >= titleButtonY && y <= titleButtonY + titleButtonHeight) {
+          setGameState('nameEntry')
+          gameContextRef.current.gameState = 'nameEntry'
+          setTimeout(() => setNameInputActive(true), 100)
+        }
         break
       case 'nameEntry':
-        if (nameInputRef.current) {
+        // Check if click is on start race button
+        const nameEntryButtonWidth = 150
+        const nameEntryButtonHeight = 40
+        const nameEntryButtonX = (canvas.width / window.devicePixelRatio) / 2 - nameEntryButtonWidth / 2
+        const nameEntryButtonY = (canvas.height / window.devicePixelRatio) / 2 + 50
+        
+        if (x >= nameEntryButtonX && x <= nameEntryButtonX + nameEntryButtonWidth &&
+            y >= nameEntryButtonY && y <= nameEntryButtonY + nameEntryButtonHeight) {
+          handleNameSubmit()
+        } else if (nameInputRef.current) {
           nameInputRef.current.focus()
         }
         break
       case 'finished':
         // Check if touch is on the play again button
-        const canvas = gameContextRef.current.canvas
-        if (!canvas) return
-        
-        const rect = canvas.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
-        
-        // Check play again button bounds
         const buttonWidth = 150
         const buttonHeight = 40
         const buttonX = (canvas.width / window.devicePixelRatio) / 2 - buttonWidth / 2
@@ -1928,7 +1943,7 @@ export default function Game() {
         }
         break
     }
-  }, [startGame, isMobile, nameInputActive, nameInputRef])
+  }, [startGame, isMobile, nameInputActive, nameInputRef, handleNameSubmit])
   
   // Load character images
   useEffect(() => {
