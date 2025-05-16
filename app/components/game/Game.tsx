@@ -4,9 +4,9 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import Canvas from './Canvas'
 import Joystick from './Joystick'
 import { GameContext, GameState, Track, Vector2D, PowerUp } from '../../types'
-import { generateId, formatTime, isMobile } from '../../lib/utils'
+import { generateId, formatTime, isMobile, generateAvatarUrl } from '../../lib/utils'
 import { updateEntityPhysics, applyPlayerControls, applyJoystickControl } from '../../lib/game-engine/physics'
-import { checkTrackCollisions, checkCheckpointCollision } from '../../lib/game-engine/collision'
+import { checkTrackCollisions } from '../../lib/game-engine/collision'
 import { updateAIOpponent, generateAIOpponents } from '../../lib/game-engine/ai'
 
 // Track definition (a longer track that takes more time to complete)
@@ -184,6 +184,7 @@ export default function Game() {
   })
   const [leaderboard, setLeaderboard] = useState<{name: string, time: number}[]>([])
   const [checkpointsPassed, setCheckpointsPassed] = useState<boolean[]>([])
+  const [characterImages, setCharacterImages] = useState<Record<string, HTMLImageElement | null>>({})
   
   // Input field reference
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -986,193 +987,223 @@ export default function Game() {
   const renderEntities = (ctx: CanvasRenderingContext2D) => {
     // Draw AI opponents
     gameContextRef.current.opponents.forEach(opponent => {
-      ctx.save();
+      ctx.save()
       
       // Translate to center of opponent
-      const centerX = opponent.position.x + opponent.width / 2;
-      const centerY = opponent.position.y + opponent.height / 2;
+      const centerX = opponent.position.x + opponent.width / 2
+      const centerY = opponent.position.y + opponent.height / 2
       
       // Calculate head radius once
-      const opponentHeadRadius = opponent.width / 1.5;
+      const opponentHeadRadius = opponent.width / 1.5
       
       // Draw name above the opponent
-      ctx.font = '10px Arial';
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
+      ctx.font = '10px Arial'
+      ctx.fillStyle = '#fff'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'bottom'
       
       // Draw name background for better readability
-      const nameWidth = ctx.measureText(opponent.name).width + 4;
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      const nameWidth = ctx.measureText(opponent.name).width + 4
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
       ctx.fillRect(
         centerX - nameWidth / 2, 
         centerY - opponentHeadRadius * 2.5 - 12, 
         nameWidth, 
         14
-      );
+      )
       
       // Draw name text
-      ctx.fillStyle = opponent.color;
+      ctx.fillStyle = opponent.color
       ctx.fillText(
         opponent.name, 
         centerX, 
         centerY - opponentHeadRadius * 2.5
-      );
+      )
       
-      ctx.translate(centerX, centerY);
+      ctx.translate(centerX, centerY)
       
       // Rotate based on opponent's rotation
-      ctx.rotate((opponent.rotation * Math.PI) / 180);
+      ctx.rotate((opponent.rotation * Math.PI) / 180)
       
       // Draw opponent "sperm" body
       
       // Draw the tail (wiggly)
-      ctx.strokeStyle = opponent.color;
-      ctx.lineWidth = opponentHeadRadius / 2.5;
-      ctx.lineCap = 'round';
+      ctx.strokeStyle = opponent.color
+      ctx.lineWidth = opponentHeadRadius / 2.5
+      ctx.lineCap = 'round'
       
       // Get position data for this opponent
-      const opponentTail = tailWaveRef.current.opponents[opponent.id];
+      const opponentTail = tailWaveRef.current.opponents[opponent.id]
       if (opponentTail && opponentTail.lastPositions.length > 1) {
-        const positions = opponentTail.lastPositions;
+        const positions = opponentTail.lastPositions
         
-        ctx.beginPath();
+        ctx.beginPath()
         // Start from the back of the head
-        ctx.moveTo(-opponentHeadRadius / 2, 0);
+        ctx.moveTo(-opponentHeadRadius / 2, 0)
         
         // Create a path through previous positions with enhanced wave effect
         for (let i = 0; i < positions.length - 1; i++) {
           // Add a more pronounced sine wave effect to the tail
-          const waveAmplitude = opponentHeadRadius / 2 * (1 - i / positions.length); // Increased amplitude
-          const wavePhase = tailWaveRef.current.offset + i * 1.8; // More frequency
-          const waveY = Math.sin(wavePhase) * waveAmplitude;
+          const waveAmplitude = opponentHeadRadius / 2 * (1 - i / positions.length) // Increased amplitude
+          const wavePhase = tailWaveRef.current.offset + i * 1.8 // More frequency
+          const waveY = Math.sin(wavePhase) * waveAmplitude
           
           // Draw tail segment
-          const segmentX = -opponentHeadRadius - (i + 1) * opponentHeadRadius / 2;
-          const segmentY = waveY;
+          const segmentX = -opponentHeadRadius - (i + 1) * opponentHeadRadius / 2
+          const segmentY = waveY
           
-          ctx.lineTo(segmentX, segmentY);
+          ctx.lineTo(segmentX, segmentY)
         }
         
         // Taper the tail width
-        ctx.strokeStyle = opponent.color;
-        const gradient = ctx.createLinearGradient(-opponentHeadRadius / 2, 0, -opponentHeadRadius * 7, 0);
-        gradient.addColorStop(0, opponent.color);
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.strokeStyle = gradient;
+        ctx.strokeStyle = opponent.color
+        const gradient = ctx.createLinearGradient(-opponentHeadRadius / 2, 0, -opponentHeadRadius * 7, 0)
+        gradient.addColorStop(0, opponent.color)
+        gradient.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.strokeStyle = gradient
         
-        ctx.stroke();
+        ctx.stroke()
       }
       
-      // Draw the head (circle)
-      const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, opponentHeadRadius);
-      headGradient.addColorStop(0, opponent.color);
-      headGradient.addColorStop(1, shadeColor(opponent.color, -20));
-      ctx.fillStyle = headGradient;
+      // Check if we have an image for this opponent
+      const characterImage = characterImages[opponent.name]
       
-      ctx.beginPath();
-      ctx.arc(0, 0, opponentHeadRadius, 0, Math.PI * 2);
-      ctx.fill();
+      if (characterImage) {
+        // Draw the character image as the head
+        const imgSize = opponentHeadRadius * 2
+        ctx.drawImage(
+          characterImage,
+          -opponentHeadRadius, // x position centered
+          -opponentHeadRadius, // y position centered
+          imgSize,
+          imgSize
+        )
+      } else {
+        // Fallback to drawing a circle if image not loaded
+        const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, opponentHeadRadius)
+        headGradient.addColorStop(0, opponent.color)
+        headGradient.addColorStop(1, shadeColor(opponent.color, -20))
+        ctx.fillStyle = headGradient
+        
+        ctx.beginPath()
+        ctx.arc(0, 0, opponentHeadRadius, 0, Math.PI * 2)
+        ctx.fill()
+      }
       
-      ctx.restore();
-    });
+      ctx.restore()
+    })
     
     // Draw player
-    const player = gameContextRef.current.player;
-    ctx.save();
+    const player = gameContextRef.current.player
+    ctx.save()
     
     // Translate to center of player
-    const playerCenterX = player.position.x + player.width / 2;
-    const playerCenterY = player.position.y + player.height / 2;
+    const playerCenterX = player.position.x + player.width / 2
+    const playerCenterY = player.position.y + player.height / 2
     
     // Calculate head radius for player
-    const playerHeadRadius = player.width / 1.5;
+    const playerHeadRadius = player.width / 1.5
     
     // Draw name above the player
-    ctx.font = '10px Arial';
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
+    ctx.font = '10px Arial'
+    ctx.fillStyle = '#fff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'bottom'
     
     // Draw name background for better readability
-    const nameWidth = ctx.measureText(player.name || 'You').width + 4;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    const nameWidth = ctx.measureText(player.name || 'You').width + 4
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
     ctx.fillRect(
       playerCenterX - nameWidth / 2, 
       playerCenterY - playerHeadRadius * 2.5 - 12, 
       nameWidth, 
       14
-    );
+    )
     
     // Draw name text
-    ctx.fillStyle = player.color;
+    ctx.fillStyle = player.color
     ctx.fillText(
       player.name || 'You', 
       playerCenterX, 
       playerCenterY - playerHeadRadius * 2.5
-    );
+    )
     
-    ctx.translate(playerCenterX, playerCenterY);
+    ctx.translate(playerCenterX, playerCenterY)
     
     // Rotate based on player's rotation
-    ctx.rotate((player.rotation * Math.PI) / 180);
+    ctx.rotate((player.rotation * Math.PI) / 180)
     
     // Draw player "sperm" with more detailed appearance
     
     // Draw the wiggly tail
-    ctx.strokeStyle = player.color;
-    ctx.lineWidth = playerHeadRadius / 2.5;
-    ctx.lineCap = 'round';
+    ctx.strokeStyle = player.color
+    ctx.lineWidth = playerHeadRadius / 2.5
+    ctx.lineCap = 'round'
     
-    const playerTail = tailWaveRef.current.player;
+    const playerTail = tailWaveRef.current.player
     if (playerTail.lastPositions.length > 1) {
-      const positions = playerTail.lastPositions;
+      const positions = playerTail.lastPositions
       
-      ctx.beginPath();
+      ctx.beginPath()
       // Start from the back of the head
-      ctx.moveTo(-playerHeadRadius / 2, 0);
+      ctx.moveTo(-playerHeadRadius / 2, 0)
       
       // Create path through previous positions with enhanced wave effect
       for (let i = 0; i < positions.length - 1; i++) {
         // Add a stronger sine wave effect to the tail
-        const waveAmplitude = playerHeadRadius / 2 * (1 - i / positions.length); // Increased amplitude
-        const wavePhase = tailWaveRef.current.offset + i * 1.8; // More frequency
-        const waveY = Math.sin(wavePhase) * waveAmplitude;
+        const waveAmplitude = playerHeadRadius / 2 * (1 - i / positions.length) // Increased amplitude
+        const wavePhase = tailWaveRef.current.offset + i * 1.8 // More frequency
+        const waveY = Math.sin(wavePhase) * waveAmplitude
         
         // Draw tail segment
-        const segmentX = -playerHeadRadius - (i + 1) * playerHeadRadius / 2;
-        const segmentY = waveY;
+        const segmentX = -playerHeadRadius - (i + 1) * playerHeadRadius / 2
+        const segmentY = waveY
         
-        ctx.lineTo(segmentX, segmentY);
+        ctx.lineTo(segmentX, segmentY)
       }
       
       // Taper the tail width with gradient - make it longer
-      const gradient = ctx.createLinearGradient(-playerHeadRadius / 2, 0, -playerHeadRadius * 7, 0);
-      gradient.addColorStop(0, player.color);
-      gradient.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.strokeStyle = gradient;
+      const gradient = ctx.createLinearGradient(-playerHeadRadius / 2, 0, -playerHeadRadius * 7, 0)
+      gradient.addColorStop(0, player.color)
+      gradient.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.strokeStyle = gradient
       
-      ctx.stroke();
+      ctx.stroke()
     }
     
-    // Draw the head (circle) with gradient
-    const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, playerHeadRadius);
-    headGradient.addColorStop(0, player.color);
-    headGradient.addColorStop(1, shadeColor(player.color, -20));
-    ctx.fillStyle = headGradient;
+    // Check if we have a player image
+    const playerImage = characterImages['You']
     
-    ctx.beginPath();
-    ctx.arc(0, 0, playerHeadRadius, 0, Math.PI * 2);
-    ctx.fill();
+    if (playerImage) {
+      // Draw the player image as the head
+      const imgSize = playerHeadRadius * 2
+      ctx.drawImage(
+        playerImage,
+        -playerHeadRadius, // x position centered
+        -playerHeadRadius, // y position centered
+        imgSize,
+        imgSize
+      )
+    } else {
+      // Fallback to drawing a circle if image not loaded
+      const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, playerHeadRadius)
+      headGradient.addColorStop(0, player.color)
+      headGradient.addColorStop(1, shadeColor(player.color, -20))
+      ctx.fillStyle = headGradient
+      
+      ctx.beginPath()
+      ctx.arc(0, 0, playerHeadRadius, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // Add a highlight to the player's head
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+      ctx.beginPath()
+      ctx.arc(-playerHeadRadius / 5, -playerHeadRadius / 5, playerHeadRadius / 4, 0, Math.PI * 2)
+      ctx.fill()
+    }
     
-    // Add a highlight to the player's head
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.beginPath();
-    ctx.arc(-playerHeadRadius / 5, -playerHeadRadius / 5, playerHeadRadius / 4, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.restore();
-  };
+    ctx.restore()
+  }
   
   const renderHUD = (ctx: CanvasRenderingContext2D) => {
     // Draw semi-transparent background for better readability
@@ -1528,19 +1559,21 @@ export default function Game() {
     
     // Create a celebration animation
     const currentTime = Date.now()
-    const animationStartTime = currentTime % 10000 // Reset every 10 seconds
-    const animationProgress = animationStartTime / 10000
+    // Reset animation every 10 seconds - used for timing the confetti patterns
+    const animationStartTime = currentTime % 10000
+    const animationProgress = animationStartTime / 10000 // Used for wave patterns
     
     // Semi-transparent overlay
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
     ctx.fillRect(0, 0, width, height)
     
-    // Draw confetti particles
+    // Draw confetti particles with wave pattern based on animationProgress
     for (let i = 0; i < 100; i++) {
-      const x = (Math.sin(currentTime / 1000 + i) * 0.5 + 0.5) * width
-      const y = ((currentTime / 1000 + i * 0.1) % 1) * height
-      const size = 5 + Math.sin(currentTime / 500 + i) * 3
-      const hue = (i * 3.6 + currentTime / 50) % 360
+      // Use animationProgress to create wave patterns in confetti
+      const x = (Math.sin(currentTime / 1000 + i + animationProgress * Math.PI * 2) * 0.5 + 0.5) * width
+      const y = ((currentTime / 1000 + i * 0.1 + animationProgress) % 1) * height
+      const size = 5 + Math.sin(currentTime / 500 + i + animationProgress * 5) * 3
+      const hue = (i * 3.6 + currentTime / 50 + animationProgress * 360) % 360
       
       ctx.fillStyle = `hsla(${hue}, 100%, 60%, 0.8)`
       ctx.beginPath()
@@ -1849,6 +1882,120 @@ export default function Game() {
     ctx.font = '24px Arial'
     ctx.fillText('Press SPACE to play again', width / 2, height / 2 + 60)
   }
+  
+  // Handle touch input for mobile
+  const handleTouch = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // Check if we're on a mobile device
+    if (!isMobile()) return
+    
+    if (gameContextRef.current.gameState === 'ready' || 
+        gameContextRef.current.gameState === 'racing') {
+      setShowJoystick(true)
+    }
+    
+    // Handle game state changes on touch
+    switch (gameContextRef.current.gameState) {
+      case 'title':
+        setGameState('nameEntry')
+        gameContextRef.current.gameState = 'nameEntry'
+        setTimeout(() => setNameInputActive(true), 100)
+        break
+      case 'nameEntry':
+        if (nameInputRef.current) {
+          nameInputRef.current.focus()
+        }
+        break
+      case 'finished':
+        // Check if touch is on the play again button
+        const canvas = gameContextRef.current.canvas
+        if (!canvas) return
+        
+        const rect = canvas.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        const y = e.clientY - rect.top
+        
+        // Check play again button bounds
+        const buttonWidth = 150
+        const buttonHeight = 40
+        const buttonX = (canvas.width / window.devicePixelRatio) / 2 - buttonWidth / 2
+        const buttonY = (canvas.height / window.devicePixelRatio) - 60
+        
+        if (x >= buttonX && x <= buttonX + buttonWidth &&
+            y >= buttonY && y <= buttonY + buttonHeight) {
+          setGameState('ready')
+          gameContextRef.current.gameState = 'ready'
+          startGame()
+        }
+        break
+    }
+  }, [startGame, isMobile, nameInputActive, nameInputRef])
+  
+  // Load character images
+  useEffect(() => {
+    const loadImage = (name: string, style: string) => {
+      const img = new Image()
+      img.src = generateAvatarUrl(name, style)
+      img.onload = () => {
+        setCharacterImages(prev => ({
+          ...prev,
+          [name]: img
+        }))
+      }
+      img.onerror = () => {
+        console.error(`Failed to load image for ${name}`)
+      }
+    }
+
+    // Load images for all characters with different styles for variety
+    loadImage('Balaji', 'avataaars')
+    loadImage('Donovan', 'bottts')
+    loadImage('Andy', 'micah')
+    loadImage('Jake', 'adventurer')
+    loadImage('Dizzy', 'bottts')
+    loadImage('Backwards', 'avataaars')
+    loadImage('Confused', 'micah')
+    loadImage('You', 'adventurer')
+  }, []) // Empty dependency array ensures this runs only once on mount
+  
+  // Initialize game loop and event listeners
+  useEffect(() => {
+    // Handle window resize
+    const handleResize = () => {
+      const width = Math.min(800, window.innerWidth)
+      const height = Math.min(600, window.innerHeight)
+      setViewportSize({ width, height })
+      
+      // Update camera position
+      setCameraPosition({ 
+        x: gameContextRef.current.player.position.x - width / 2,
+        y: gameContextRef.current.player.position.y - height / 3
+      })
+    }
+    
+    // Initial sizing
+    handleResize()
+    
+    // Add event listeners
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    
+    // Start game loop
+    requestAnimationFrameRef.current = requestAnimationFrame(gameLoop)
+    
+    // Check if mobile and enable joystick
+    if (isMobile()) {
+      setShowJoystick(true)
+    }
+    
+    return () => {
+      // Clean up
+      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      cancelAnimationFrame(requestAnimationFrameRef.current)
+    }
+  }, [gameLoop, handleKeyDown, handleKeyUp, isMobile])
   
   return (
     <div 

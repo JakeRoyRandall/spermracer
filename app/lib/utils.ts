@@ -29,22 +29,17 @@ export function angleToVector(angle: number): Vector2D {
   }
 }
 
-export function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  const milliseconds = Math.floor((ms % 1000) / 10)
+export function formatTime(time: number): string {
+  const minutes = Math.floor(time / 60000)
+  const seconds = Math.floor((time % 60000) / 1000)
+  const milliseconds = Math.floor((time % 1000) / 10)
   
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`
 }
 
 export function isMobile(): boolean {
-  if (typeof window !== 'undefined') {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent
-    )
-  }
-  return false
+  if (typeof window === 'undefined') return false
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -77,4 +72,10 @@ export function lineIntersection(
   }
 
   return null
+}
+
+export function generateAvatarUrl(name: string, style: string = 'bottts'): string {
+  const seed = name.toLowerCase().trim()
+  
+  return `https://api.dicebear.com/6.x/${style}/svg?seed=${encodeURIComponent(seed)}`
 } 
