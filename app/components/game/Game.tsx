@@ -9,11 +9,14 @@ import { updateEntityPhysics, applyPlayerControls, applyJoystickControl } from '
 import { checkTrackCollisions, checkCheckpointCollision } from '../../lib/game-engine/collision'
 import { updateAIOpponent, generateAIOpponents } from '../../lib/game-engine/ai'
 
-// Track definition (a simple oval track)
-const trackWidth = 800
-const trackHeight = 500
-const trackWallThickness = 40
+// Track definition (a longer track that takes more time to complete)
+const trackWidth = 2000
+const trackHeight = 4000
 const checkpointRadius = 50
+
+// Egg finish area configuration
+const eggPosition = { x: trackWidth / 2, y: trackHeight - 300 }
+const eggRadius = 300 // Much larger egg
 
 const track: Track = {
   width: trackWidth,
@@ -25,34 +28,64 @@ const track: Track = {
     { start: { x: trackWidth, y: trackHeight }, end: { x: 0, y: trackHeight } },
     { start: { x: 0, y: trackHeight }, end: { x: 0, y: 0 } },
     
-    // Inner walls
-    { start: { x: trackWallThickness * 4, y: trackWallThickness * 2 }, end: { x: trackWidth - trackWallThickness * 4, y: trackWallThickness * 2 } },
-    { start: { x: trackWidth - trackWallThickness * 4, y: trackWallThickness * 2 }, end: { x: trackWidth - trackWallThickness * 4, y: trackHeight - trackWallThickness * 2 } },
-    { start: { x: trackWidth - trackWallThickness * 4, y: trackHeight - trackWallThickness * 2 }, end: { x: trackWallThickness * 4, y: trackHeight - trackWallThickness * 2 } },
-    { start: { x: trackWallThickness * 4, y: trackHeight - trackWallThickness * 2 }, end: { x: trackWallThickness * 4, y: trackWallThickness * 2 } },
+    // Inner path walls - create a winding path
+    // First section - entry tube
+    { start: { x: trackWidth / 2 - 200, y: 0 }, end: { x: trackWidth / 2 - 200, y: 600 } },
+    { start: { x: trackWidth / 2 + 200, y: 0 }, end: { x: trackWidth / 2 + 200, y: 600 } },
+    
+    // Second section - first winding path
+    { start: { x: trackWidth / 2 - 200, y: 600 }, end: { x: 300, y: 800 } },
+    { start: { x: trackWidth / 2 + 200, y: 600 }, end: { x: trackWidth - 300, y: 800 } },
+    { start: { x: 300, y: 800 }, end: { x: 300, y: 1200 } },
+    { start: { x: trackWidth - 300, y: 800 }, end: { x: trackWidth - 300, y: 1200 } },
+    
+    // Third section - narrowing middle section
+    { start: { x: 300, y: 1200 }, end: { x: trackWidth / 2 - 150, y: 1600 } },
+    { start: { x: trackWidth - 300, y: 1200 }, end: { x: trackWidth / 2 + 150, y: 1600 } },
+    { start: { x: trackWidth / 2 - 150, y: 1600 }, end: { x: trackWidth / 2 - 150, y: 2000 } },
+    { start: { x: trackWidth / 2 + 150, y: 1600 }, end: { x: trackWidth / 2 + 150, y: 2000 } },
+    
+    // Fourth section - winding path to egg
+    { start: { x: trackWidth / 2 - 150, y: 2000 }, end: { x: trackWidth / 4, y: 2400 } },
+    { start: { x: trackWidth / 2 + 150, y: 2000 }, end: { x: trackWidth * 3/4, y: 2400 } },
+    { start: { x: trackWidth / 4, y: 2400 }, end: { x: trackWidth / 4, y: 3000 } },
+    { start: { x: trackWidth * 3/4, y: 2400 }, end: { x: trackWidth * 3/4, y: 3000 } },
+    
+    // Final section - path to egg
+    { start: { x: trackWidth / 4, y: 3000 }, end: { x: trackWidth / 2 - 200, y: 3500 } },
+    { start: { x: trackWidth * 3/4, y: 3000 }, end: { x: trackWidth / 2 + 200, y: 3500 } },
   ],
   checkpoints: [
-    { x: trackWidth / 2, y: trackWallThickness },
-    { x: trackWidth - trackWallThickness * 2, y: trackHeight / 2 },
-    { x: trackWidth / 2, y: trackHeight - trackWallThickness },
-    { x: trackWallThickness * 2, y: trackHeight / 2 }
+    // Place checkpoints along the path
+    { x: trackWidth / 2, y: 300 },
+    { x: trackWidth / 2, y: 700 },
+    { x: 500, y: 1000 },
+    { x: trackWidth - 500, y: 1000 },
+    { x: trackWidth / 2, y: 1800 },
+    { x: trackWidth / 3, y: 2200 },
+    { x: trackWidth * 2/3, y: 2200 },
+    { x: trackWidth / 2, y: 2800 },
+    { x: trackWidth / 2, y: 3200 }
   ],
   startLine: {
-    start: { x: trackWidth / 2 - 50, y: trackWallThickness * 2 },
-    end: { x: trackWidth / 2 + 50, y: trackWallThickness * 2 }
+    start: { x: trackWidth / 2 - 150, y: 150 },
+    end: { x: trackWidth / 2 + 150, y: 150 }
   }
 }
 
 // Waypoints for AI opponents to follow
 const aiWaypoints: Vector2D[] = [
-  { x: trackWidth / 2, y: trackWallThickness * 3 },
-  { x: trackWidth - trackWallThickness * 6, y: trackHeight / 4 },
-  { x: trackWidth - trackWallThickness * 6, y: trackHeight / 2 },
-  { x: trackWidth - trackWallThickness * 6, y: trackHeight * 3 / 4 },
-  { x: trackWidth / 2, y: trackHeight - trackWallThickness * 3 },
-  { x: trackWallThickness * 6, y: trackHeight * 3 / 4 },
-  { x: trackWallThickness * 6, y: trackHeight / 2 },
-  { x: trackWallThickness * 6, y: trackHeight / 4 }
+  // Follow the track's path
+  { x: trackWidth / 2, y: 300 },
+  { x: trackWidth / 2, y: 700 },
+  { x: 500, y: 1000 },
+  { x: trackWidth - 500, y: 1000 },
+  { x: trackWidth / 2, y: 1800 },
+  { x: trackWidth / 3, y: 2200 },
+  { x: trackWidth * 2/3, y: 2200 },
+  { x: trackWidth / 2, y: 2800 },
+  { x: trackWidth / 2, y: 3200 },
+  { x: trackWidth / 2, y: 3700 } // Final waypoint at the egg
 ]
 
 export default function Game() {
@@ -60,6 +93,12 @@ export default function Game() {
   const [showJoystick, setShowJoystick] = useState(false)
   const [countdown, setCountdown] = useState(3)
   const [bestTime, setBestTime] = useState<number | null>(null)
+  const [playerName, setPlayerName] = useState<string>('')
+  const [cameraPosition, setCameraPosition] = useState<Vector2D>({ x: 0, y: 0 })
+  const [viewportSize, setViewportSize] = useState<{ width: number, height: number }>({ 
+    width: 800, 
+    height: 600 
+  })
   
   const gameContextRef = useRef<GameContext>({
     canvas: null,
@@ -68,7 +107,7 @@ export default function Game() {
     player: {
       id: generateId(),
       name: 'You',
-      position: { x: trackWidth / 2 - 10, y: trackWallThickness * 3 },
+      position: { x: trackWidth / 2 - 10, y: 150 },
       velocity: { x: 0, y: 0 },
       acceleration: { x: 0, y: 0 },
       rotation: 0,
@@ -133,8 +172,8 @@ export default function Game() {
   
   // Update tail wave animation in the game loop
   const updateTailAnimation = (deltaTime: number) => {
-    // Update wave offset for animation
-    tailWaveRef.current.offset += deltaTime * 10;
+    // Update wave offset for animation - increase speed and amplitude
+    tailWaveRef.current.offset += deltaTime * 15; // Faster wiggle
     if (tailWaveRef.current.offset > 100) {
       tailWaveRef.current.offset = 0;
     }
@@ -152,8 +191,8 @@ export default function Game() {
       y: playerCenter.y
     });
     
-    // Keep only the most recent positions
-    if (tailWaveRef.current.player.lastPositions.length > 8) {
+    // Keep only the most recent positions - add more segments for longer tail
+    if (tailWaveRef.current.player.lastPositions.length > 12) {
       tailWaveRef.current.player.lastPositions.pop();
     }
     
@@ -172,8 +211,8 @@ export default function Game() {
         y: opponentCenter.y
       });
       
-      // Keep only the most recent positions
-      if (tailWaveRef.current.opponents[opponent.id].lastPositions.length > 8) {
+      // Keep only the most recent positions - add more segments for longer tail
+      if (tailWaveRef.current.opponents[opponent.id].lastPositions.length > 12) {
         tailWaveRef.current.opponents[opponent.id].lastPositions.pop();
       }
     });
@@ -249,9 +288,13 @@ export default function Game() {
   
   // Start a new game
   const startGame = useCallback(() => {
+    // Use the player's input name or default to "You"
+    const name = playerName.trim() || "You"
+    
     // Reset player state
     const { player } = gameContextRef.current
-    player.position = { x: trackWidth / 2 - 10, y: trackWallThickness * 3 }
+    player.name = name
+    player.position = { x: trackWidth / 2 - 10, y: 150 }
     player.velocity = { x: 0, y: 0 }
     player.acceleration = { x: 0, y: 0 }
     player.rotation = 0
@@ -260,11 +303,17 @@ export default function Game() {
     player.bestLapTime = null
     player.currentLapTime = 0
     
-    // Generate AI opponents
-    gameContextRef.current.opponents = generateAIOpponents(3, 
-      { x: trackWidth / 2 + 20, y: trackWallThickness * 3 }, 
+    // Generate AI opponents (7 total)
+    gameContextRef.current.opponents = generateAIOpponents(7, 
+      { x: trackWidth / 2 + 20, y: 150 }, 
       aiWaypoints
     )
+    
+    // Reset camera position
+    setCameraPosition({ 
+      x: player.position.x - viewportSize.width / 2,
+      y: player.position.y - viewportSize.height / 3
+    })
     
     // Reset game state
     setGameState('ready')
@@ -290,7 +339,7 @@ export default function Game() {
         return newCountdown
       })
     }, 1000)
-  }, [])
+  }, [playerName, viewportSize.height, viewportSize.width])
   
   // Game loop
   const gameLoop = useCallback(() => {
@@ -310,14 +359,40 @@ export default function Game() {
     // Clear the canvas
     ctx.clearRect(0, 0, canvas.width / window.devicePixelRatio, canvas.height / window.devicePixelRatio)
     
+    // Update camera position to follow the player
+    if (gameContextRef.current.gameState === 'racing') {
+      const player = gameContextRef.current.player
+      
+      // Calculate target camera position (centered on player with some lookahead)
+      const targetCameraX = player.position.x - viewportSize.width / 2 + player.velocity.x * 0.5
+      const targetCameraY = player.position.y - viewportSize.height / 2 + player.velocity.y * 0.5
+      
+      // Smoothly interpolate camera position for a nicer effect
+      const cameraLerpFactor = 0.1
+      setCameraPosition(prev => ({
+        x: prev.x + (targetCameraX - prev.x) * cameraLerpFactor,
+        y: prev.y + (targetCameraY - prev.y) * cameraLerpFactor
+      }))
+    }
+    
+    // Apply camera transform
+    ctx.save()
+    ctx.translate(-cameraPosition.x, -cameraPosition.y)
+    
     // Update game state based on current state
     switch (gameContextRef.current.gameState) {
       case 'title':
+        // Don't apply camera transform for UI screens
+        ctx.restore()
         renderTitleScreen(ctx, canvas)
         break
       case 'ready':
         renderTrack(ctx)
         renderEntities(ctx)
+        // Draw egg finish area
+        renderEggFinishArea(ctx)
+        // Reset transform for UI
+        ctx.restore()
         renderCountdown(ctx, canvas)
         break
       case 'racing':
@@ -372,73 +447,238 @@ export default function Game() {
             
             // Reset current lap time
             gameContextRef.current.player.currentLapTime = 0
-            
-            // Check if race is complete (3 laps)
-            if (gameContextRef.current.player.laps >= 3) {
-              setGameState('finished')
-              gameContextRef.current.gameState = 'finished'
-              
-              // Update best time
-              if (bestTime === null || gameContextRef.current.time < bestTime) {
-                setBestTime(gameContextRef.current.time)
-                gameContextRef.current.bestTime = gameContextRef.current.time
-              }
-            }
+          }
+        }
+        
+        // Check if player has reached the egg finish area
+        const distanceToEgg = Math.sqrt(
+          Math.pow(gameContextRef.current.player.position.x + gameContextRef.current.player.width / 2 - eggPosition.x, 2) +
+          Math.pow(gameContextRef.current.player.position.y + gameContextRef.current.player.height / 2 - eggPosition.y, 2)
+        )
+        
+        if (distanceToEgg < eggRadius && nextCheckpointRef.current >= gameContextRef.current.track.checkpoints.length - 1) {
+          // Player has reached the egg after passing all checkpoints
+          setGameState('finished')
+          gameContextRef.current.gameState = 'finished'
+          
+          // Update best time
+          if (bestTime === null || gameContextRef.current.time < bestTime) {
+            setBestTime(gameContextRef.current.time)
+            gameContextRef.current.bestTime = gameContextRef.current.time
           }
         }
         
         // Render everything
         renderTrack(ctx)
+        renderEggFinishArea(ctx)
         renderEntities(ctx)
+        
+        // Reset transform for UI
+        ctx.restore()
         renderHUD(ctx)
         break
       case 'finished':
         renderTrack(ctx)
+        renderEggFinishArea(ctx)
         renderEntities(ctx)
+        // Reset transform for UI
+        ctx.restore()
         renderFinished(ctx, canvas)
         break
       case 'gameOver':
+        // Reset transform for UI
+        ctx.restore()
         renderGameOver(ctx, canvas)
+        break
+      default:
+        // Reset transform
+        ctx.restore()
         break
     }
     
     requestAnimationFrameRef.current = requestAnimationFrame(gameLoop)
-  }, [showJoystick, bestTime])
+  }, [showJoystick, bestTime, cameraPosition, viewportSize.height, viewportSize.width])
+  
+  // Render the egg finish area
+  const renderEggFinishArea = (ctx: CanvasRenderingContext2D) => {
+    // Add a glow behind the egg
+    const outerGlowRadius = eggRadius * 1.5
+    const outerGlowGradient = ctx.createRadialGradient(
+      eggPosition.x, eggPosition.y, eggRadius * 0.5,
+      eggPosition.x, eggPosition.y, outerGlowRadius
+    )
+    outerGlowGradient.addColorStop(0, 'rgba(255, 220, 100, 0.4)')
+    outerGlowGradient.addColorStop(1, 'rgba(255, 220, 100, 0)')
+    
+    ctx.fillStyle = outerGlowGradient
+    ctx.beginPath()
+    ctx.ellipse(
+      eggPosition.x, eggPosition.y,
+      outerGlowRadius, outerGlowRadius * 1.3,
+      0, 0, Math.PI * 2
+    )
+    ctx.fill()
+
+    // Draw egg shape
+    const eggGradient = ctx.createRadialGradient(
+      eggPosition.x, eggPosition.y, 0,
+      eggPosition.x, eggPosition.y, eggRadius
+    )
+    eggGradient.addColorStop(0, '#FFFFDD')
+    eggGradient.addColorStop(0.7, '#FFDD99')
+    eggGradient.addColorStop(1, '#FFCC66')
+    
+    ctx.fillStyle = eggGradient
+    ctx.beginPath()
+    
+    // Draw an egg shape (more pronounced elongation)
+    const verticalRadius = eggRadius * 1.3
+    ctx.ellipse(
+      eggPosition.x, eggPosition.y,
+      eggRadius, verticalRadius,
+      0, 0, Math.PI * 2
+    )
+    ctx.fill()
+    
+    // Add egg details
+    // Outer border
+    ctx.strokeStyle = '#FFBB44'
+    ctx.lineWidth = 10
+    ctx.beginPath()
+    ctx.ellipse(
+      eggPosition.x, eggPosition.y,
+      eggRadius, verticalRadius,
+      0, 0, Math.PI * 2
+    )
+    ctx.stroke()
+    
+    // Internal cell structure - nucleus
+    ctx.fillStyle = '#FFFFEE'
+    ctx.beginPath()
+    ctx.arc(
+      eggPosition.x, eggPosition.y - verticalRadius * 0.2,
+      eggRadius * 0.4,
+      0, Math.PI * 2
+    )
+    ctx.fill()
+    
+    // Nucleus border
+    ctx.strokeStyle = '#FFCC88'
+    ctx.lineWidth = 5
+    ctx.beginPath()
+    ctx.arc(
+      eggPosition.x, eggPosition.y - verticalRadius * 0.2,
+      eggRadius * 0.4,
+      0, Math.PI * 2
+    )
+    ctx.stroke()
+    
+    // Add pulsing effect to make it more noticeable
+    const pulseSize = Math.sin(Date.now() / 500) * 20
+    
+    // Add "FINISH" text with pulsing effect
+    ctx.font = `bold ${36 + pulseSize}px Arial`
+    ctx.fillStyle = '#FF6600'
+    ctx.strokeStyle = '#FFFFFF'
+    ctx.lineWidth = 2
+    ctx.textAlign = 'center'
+    ctx.strokeText('FERTILIZE ME!', eggPosition.x, eggPosition.y - verticalRadius - 30)
+    ctx.fillText('FERTILIZE ME!', eggPosition.x, eggPosition.y - verticalRadius - 30)
+  }
   
   // Render functions
   const renderTrack = (ctx: CanvasRenderingContext2D) => {
-    // Draw outer track (representing the reproductive tract)
-    ctx.fillStyle = '#FF90B3' // Pink color for reproductive tract
+    // Draw outer track (representing the fallopian tube)
+    const tubeGradient = ctx.createLinearGradient(0, 0, 0, track.height)
+    tubeGradient.addColorStop(0, '#FF90B3')  // Lighter pink at top
+    tubeGradient.addColorStop(0.5, '#FF6699') // Mid-tone pink in middle
+    tubeGradient.addColorStop(1, '#DD5599')   // Darker pink at bottom
+    
+    ctx.fillStyle = tubeGradient
     ctx.fillRect(0, 0, track.width, track.height)
     
-    // Create a pattern for the background
+    // Create a tissue-like pattern for the background
     ctx.fillStyle = '#E56B9F' // Slightly darker pink
-    for (let x = 0; x < track.width; x += 30) {
-      for (let y = 0; y < track.height; y += 30) {
-        // Create a wavy pattern
-        if ((x + y) % 60 === 0) {
-          ctx.fillRect(x, y, 15, 15)
+    for (let x = 0; x < track.width; x += 40) {
+      for (let y = 0; y < track.height; y += 40) {
+        // Create a more organic pattern with varied sizes
+        if ((x + y) % 80 < 20) {
+          const size = 10 + Math.sin(x * y * 0.0001) * 5
+          ctx.fillRect(x + Math.sin(y * 0.1) * 10, y + Math.cos(x * 0.1) * 10, size, size)
         }
       }
     }
     
-    // Draw inner track (representing the center pathway)
-    ctx.fillStyle = '#FFDDE5' // Lighter pink
-    ctx.fillRect(
-      trackWallThickness * 4, 
-      trackWallThickness * 2, 
-      track.width - trackWallThickness * 8, 
-      track.height - trackWallThickness * 4
-    )
+    // Add tube folds and texture
+    ctx.strokeStyle = '#E05590'
+    ctx.lineWidth = 5
     
-    // Add texture to the inner track
-    ctx.fillStyle = '#FFE6ED' // Even lighter pink
-    for (let x = trackWallThickness * 4; x < track.width - trackWallThickness * 4; x += 20) {
-      for (let y = trackWallThickness * 2; y < track.height - trackWallThickness * 2; y += 20) {
-        if ((x + y) % 40 === 0) {
-          ctx.fillRect(x, y, 10, 10)
+    // Horizontal folds
+    for (let y = 100; y < track.height; y += 150) {
+      ctx.beginPath()
+      for (let x = 0; x < track.width; x += 50) {
+        const yOffset = Math.sin(x * 0.05) * 20
+        if (x === 0) {
+          ctx.moveTo(x, y + yOffset)
+        } else {
+          ctx.lineTo(x, y + yOffset)
         }
       }
+      ctx.stroke()
+    }
+    
+    // Vertical folds
+    for (let x = 100; x < track.width; x += 200) {
+      ctx.beginPath()
+      for (let y = 0; y < track.height; y += 50) {
+        const xOffset = Math.sin(y * 0.03) * 15
+        if (y === 0) {
+          ctx.moveTo(x + xOffset, y)
+        } else {
+          ctx.lineTo(x + xOffset, y)
+        }
+      }
+      ctx.stroke()
+    }
+    
+    // Add cell-like structures to the walls
+    ctx.fillStyle = 'rgba(255, 150, 180, 0.4)'
+    for (let i = 0; i < 200; i++) {
+      const x = Math.random() * track.width
+      const y = Math.random() * track.height
+      const size = 20 + Math.random() * 40
+      
+      ctx.beginPath()
+      ctx.arc(x, y, size, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    
+    // Draw the walls
+    for (const wall of track.walls) {
+      // Create a tube-like appearance for walls
+      const wallGradient = ctx.createLinearGradient(
+        wall.start.x, wall.start.y, 
+        wall.end.x, wall.end.y
+      )
+      wallGradient.addColorStop(0, '#FF3377')
+      wallGradient.addColorStop(0.5, '#DD1155')
+      wallGradient.addColorStop(1, '#FF3377')
+      
+      ctx.strokeStyle = wallGradient
+      ctx.lineWidth = 20 // Thicker walls
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      ctx.moveTo(wall.start.x, wall.start.y)
+      ctx.lineTo(wall.end.x, wall.end.y)
+      ctx.stroke()
+      
+      // Add a highlight to give depth
+      ctx.strokeStyle = 'rgba(255, 180, 200, 0.5)'
+      ctx.lineWidth = 5
+      ctx.beginPath()
+      ctx.moveTo(wall.start.x, wall.start.y)
+      ctx.lineTo(wall.end.x, wall.end.y)
+      ctx.stroke()
     }
     
     // Draw checkpoints
@@ -467,19 +707,46 @@ export default function Game() {
       ctx.stroke()
     }
     
-    // Draw start line
-    ctx.strokeStyle = '#fff'
-    ctx.lineWidth = 5
-    ctx.beginPath()
-    ctx.moveTo(track.startLine.start.x, track.startLine.start.y)
-    ctx.lineTo(track.startLine.end.x, track.startLine.end.y)
-    ctx.stroke()
+    // Draw checkered start line
+    const startX = track.startLine.start.x
+    const startY = track.startLine.start.y
+    const endX = track.startLine.end.x
+    
+    // Calculate the length of the start line
+    const lineLength = endX - startX
+    
+    // Determine the size of each square in the checkered pattern
+    const squareSize = 10
+    
+    // Calculate how many squares we need
+    const numSquares = Math.floor(lineLength / squareSize)
+    
+    // Draw the checkered pattern
+    for (let i = 0; i < numSquares; i++) {
+      // Alternate colors based on position
+      if (i % 2 === 0) {
+        ctx.fillStyle = '#ffffff' // White
+      } else {
+        ctx.fillStyle = '#000000' // Black
+      }
+      
+      // Calculate square position
+      const squareX = startX + i * squareSize
+      
+      // Draw the square (slightly taller than the line width for visibility)
+      ctx.fillRect(squareX, startY - 8, squareSize, 16)
+    }
+    
+    // Add black outline for the start line
+    ctx.strokeStyle = '#000'
+    ctx.lineWidth = 2
+    ctx.strokeRect(startX, startY - 8, lineLength, 16)
     
     // Add "START" text
     ctx.fillStyle = '#fff'
-    ctx.font = '12px Arial'
+    ctx.font = '14px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('START', (track.startLine.start.x + track.startLine.end.x) / 2, track.startLine.start.y - 5)
+    ctx.fillText('START', (startX + endX) / 2, startY - 15)
   }
   
   const renderEntities = (ctx: CanvasRenderingContext2D) => {
@@ -536,41 +803,41 @@ export default function Game() {
         const positions = opponentTail.lastPositions;
         
         ctx.beginPath();
-                  // Start from the back of the head
-          ctx.moveTo(-opponentHeadRadius / 2, 0);
+        // Start from the back of the head
+        ctx.moveTo(-opponentHeadRadius / 2, 0);
+        
+        // Create a path through previous positions with enhanced wave effect
+        for (let i = 0; i < positions.length - 1; i++) {
+          // Add a more pronounced sine wave effect to the tail
+          const waveAmplitude = opponentHeadRadius / 2 * (1 - i / positions.length); // Increased amplitude
+          const wavePhase = tailWaveRef.current.offset + i * 1.8; // More frequency
+          const waveY = Math.sin(wavePhase) * waveAmplitude;
           
-          // Create a path through previous positions with wave effect
-          for (let i = 0; i < positions.length - 1; i++) {
-            // Add a sine wave effect to the tail
-            const waveAmplitude = opponentHeadRadius / 3 * (1 - i / positions.length);
-            const wavePhase = tailWaveRef.current.offset + i * 1.5;
-            const waveY = Math.sin(wavePhase) * waveAmplitude;
-            
-            // Draw tail segment
-            const segmentX = -opponentHeadRadius - (i + 1) * opponentHeadRadius / 2;
-            const segmentY = waveY;
-            
-            ctx.lineTo(segmentX, segmentY);
-          }
+          // Draw tail segment
+          const segmentX = -opponentHeadRadius - (i + 1) * opponentHeadRadius / 2;
+          const segmentY = waveY;
           
-          // Taper the tail width
-          ctx.strokeStyle = opponent.color;
-          const gradient = ctx.createLinearGradient(-opponentHeadRadius / 2, 0, -opponentHeadRadius * 5, 0);
-          gradient.addColorStop(0, opponent.color);
-          gradient.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.strokeStyle = gradient;
+          ctx.lineTo(segmentX, segmentY);
+        }
+        
+        // Taper the tail width
+        ctx.strokeStyle = opponent.color;
+        const gradient = ctx.createLinearGradient(-opponentHeadRadius / 2, 0, -opponentHeadRadius * 7, 0);
+        gradient.addColorStop(0, opponent.color);
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.strokeStyle = gradient;
         
         ctx.stroke();
       }
       
       // Draw the head (circle)
-      const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, headRadius);
+      const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, opponentHeadRadius);
       headGradient.addColorStop(0, opponent.color);
       headGradient.addColorStop(1, shadeColor(opponent.color, -20));
       ctx.fillStyle = headGradient;
       
       ctx.beginPath();
-      ctx.arc(0, 0, headRadius, 0, Math.PI * 2);
+      ctx.arc(0, 0, opponentHeadRadius, 0, Math.PI * 2);
       ctx.fill();
       
       ctx.restore();
@@ -617,11 +884,10 @@ export default function Game() {
     ctx.rotate((player.rotation * Math.PI) / 180);
     
     // Draw player "sperm" with more detailed appearance
-    const headRadius = player.width / 1.5;
     
     // Draw the wiggly tail
     ctx.strokeStyle = player.color;
-    ctx.lineWidth = headRadius / 2.5;
+    ctx.lineWidth = playerHeadRadius / 2.5;
     ctx.lineCap = 'round';
     
     const playerTail = tailWaveRef.current.player;
@@ -630,24 +896,24 @@ export default function Game() {
       
       ctx.beginPath();
       // Start from the back of the head
-      ctx.moveTo(-headRadius / 2, 0);
+      ctx.moveTo(-playerHeadRadius / 2, 0);
       
-      // Create path through previous positions with wave effect
+      // Create path through previous positions with enhanced wave effect
       for (let i = 0; i < positions.length - 1; i++) {
-        // Add a sine wave effect to the tail
-        const waveAmplitude = headRadius / 3 * (1 - i / positions.length);
-        const wavePhase = tailWaveRef.current.offset + i * 1.5;
+        // Add a stronger sine wave effect to the tail
+        const waveAmplitude = playerHeadRadius / 2 * (1 - i / positions.length); // Increased amplitude
+        const wavePhase = tailWaveRef.current.offset + i * 1.8; // More frequency
         const waveY = Math.sin(wavePhase) * waveAmplitude;
         
         // Draw tail segment
-        const segmentX = -headRadius - (i + 1) * headRadius / 2;
+        const segmentX = -playerHeadRadius - (i + 1) * playerHeadRadius / 2;
         const segmentY = waveY;
         
         ctx.lineTo(segmentX, segmentY);
       }
       
-      // Taper the tail width with gradient
-      const gradient = ctx.createLinearGradient(-headRadius / 2, 0, -headRadius * 5, 0);
+      // Taper the tail width with gradient - make it longer
+      const gradient = ctx.createLinearGradient(-playerHeadRadius / 2, 0, -playerHeadRadius * 7, 0);
       gradient.addColorStop(0, player.color);
       gradient.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.strokeStyle = gradient;
@@ -656,19 +922,19 @@ export default function Game() {
     }
     
     // Draw the head (circle) with gradient
-    const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, headRadius);
+    const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, playerHeadRadius);
     headGradient.addColorStop(0, player.color);
     headGradient.addColorStop(1, shadeColor(player.color, -20));
     ctx.fillStyle = headGradient;
     
     ctx.beginPath();
-    ctx.arc(0, 0, headRadius, 0, Math.PI * 2);
+    ctx.arc(0, 0, playerHeadRadius, 0, Math.PI * 2);
     ctx.fill();
     
     // Add a highlight to the player's head
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.beginPath();
-    ctx.arc(-headRadius / 5, -headRadius / 5, headRadius / 4, 0, Math.PI * 2);
+    ctx.arc(-playerHeadRadius / 5, -playerHeadRadius / 5, playerHeadRadius / 4, 0, Math.PI * 2);
     ctx.fill();
     
     ctx.restore();
@@ -764,38 +1030,68 @@ export default function Game() {
     ctx.fillStyle = '#fff'
     ctx.font = 'bold 48px Arial'
     ctx.textAlign = 'center'
-    ctx.fillText('SPERM RACER', width / 2, height / 3)
+    ctx.fillText('SPERM RACER', width / 2, height / 4)
     
     // Add subtitle
     ctx.font = '24px Arial'
-    ctx.fillText('The Race to Fertilization', width / 2, height / 3 + 40)
+    ctx.fillText('The Race to Fertilization', width / 2, height / 4 + 40)
+    
+    // Add name input instruction
+    ctx.font = '20px Arial'
+    ctx.fillText('Enter your name:', width / 2, height / 2 - 40)
+    
+    // Draw a stylized input box
+    const inputBoxWidth = 250
+    const inputBoxHeight = 40
+    const inputBoxX = width / 2 - inputBoxWidth / 2
+    const inputBoxY = height / 2 - 20
+    
+    // Draw input box shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
+    ctx.fillRect(inputBoxX + 3, inputBoxY + 3, inputBoxWidth, inputBoxHeight)
+    
+    // Draw input box
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight)
+    
+    // Draw input box border
+    ctx.strokeStyle = '#FF5C8D'
+    ctx.lineWidth = 2
+    ctx.strokeRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight)
+    
+    // Draw player name
+    ctx.fillStyle = '#000'
+    ctx.textAlign = 'left'
+    ctx.font = '18px Arial'
+    ctx.fillText(playerName + (Math.floor(Date.now() / 500) % 2 === 0 ? '|' : ''), inputBoxX + 10, inputBoxY + 25)
     
     // Add start instructions
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.textAlign = 'center'
     ctx.font = '20px Arial'
     
     if (isMobile()) {
-      ctx.fillText('Tap to Start', width / 2, height / 2 + 40)
+      ctx.fillText('Tap to Start', width / 2, height / 2 + 80)
       ctx.font = '16px Arial'
-      ctx.fillText('Use the joystick to control', width / 2, height / 2 + 70)
+      ctx.fillText('Use the joystick to control', width / 2, height / 2 + 110)
     } else {
-      ctx.fillText('Press SPACE to start', width / 2, height / 2 + 40)
+      ctx.fillText('Press SPACE to start', width / 2, height / 2 + 80)
       ctx.font = '16px Arial'
-      ctx.fillText('Use arrow keys or WASD to control', width / 2, height / 2 + 70)
+      ctx.fillText('Use arrow keys or WASD to control', width / 2, height / 2 + 110)
     }
     
     // Add best time if available
     if (bestTime) {
       ctx.fillStyle = '#FFD700'  // Gold color
       ctx.font = 'bold 18px Arial'
-      ctx.fillText(`Best Time: ${formatTime(bestTime)}`, width / 2, height / 2 + 120)
+      ctx.fillText(`Best Time: ${formatTime(bestTime)}`, width / 2, height / 2 + 150)
     }
     
     // Add game instructions
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
     ctx.font = '14px Arial'
     ctx.fillText('Race through the checkpoints', width / 2, height - 60)
-    ctx.fillText('Complete 3 laps to win', width / 2, height - 40)
+    ctx.fillText('Reach the egg at the end to win!', width / 2, height - 40)
   }
   
   const renderCountdown = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
@@ -949,12 +1245,44 @@ export default function Game() {
     }
   };
   
+  // Handle name input
+  const handleNameInput = useCallback((e: KeyboardEvent) => {
+    if (gameContextRef.current.gameState !== 'title') return
+    
+    if (e.key === 'Backspace') {
+      setPlayerName(prev => prev.slice(0, -1))
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      startGame()
+    } else if (e.key.length === 1 && playerName.length < 15) {
+      setPlayerName(prev => prev + e.key)
+    }
+  }, [playerName, startGame])
+
   // Handle touch for mobile devices
   const handleTouch = useCallback(() => {
-    if (gameContextRef.current.gameState === 'title' || gameContextRef.current.gameState === 'gameOver' || gameContextRef.current.gameState === 'finished') {
+    if (gameContextRef.current.gameState === 'title') {
       startGame()
+    } else if (gameContextRef.current.gameState === 'gameOver' || gameContextRef.current.gameState === 'finished') {
+      setGameState('title')
+      gameContextRef.current.gameState = 'title'
     }
   }, [startGame])
+
+  // Update viewport size on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportSize({
+        width: Math.min(800, window.innerWidth),
+        height: Math.min(600, window.innerHeight)
+      })
+    }
+    
+    // Set initial size
+    handleResize()
+    
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
   
   // Setup event listeners and game loop
   useEffect(() => {
@@ -964,6 +1292,7 @@ export default function Game() {
     // Add event listeners for keyboard controls
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('keypress', handleNameInput)
     
     // Start game loop
     requestAnimationFrameRef.current = requestAnimationFrame(gameLoop)
@@ -971,9 +1300,10 @@ export default function Game() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('keypress', handleNameInput)
       cancelAnimationFrame(requestAnimationFrameRef.current)
     }
-  }, [gameLoop, handleKeyDown, handleKeyUp])
+  }, [gameLoop, handleKeyDown, handleKeyUp, handleNameInput])
   
   return (
     <div 
@@ -982,8 +1312,8 @@ export default function Game() {
     >
       <div className="relative">
         <Canvas 
-          width={trackWidth} 
-          height={trackHeight} 
+          width={viewportSize.width} 
+          height={viewportSize.height} 
           onCanvasReady={handleCanvasReady}
         />
         {showJoystick && gameState === 'racing' && (

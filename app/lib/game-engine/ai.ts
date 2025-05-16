@@ -1,9 +1,33 @@
 import { AIOpponent, Vector2D } from '../../types'
 
 // CPU player names
-const CPU_NAMES = ['Balaji', 'Donovan', 'Andy', 'Jake']
+const CPU_NAMES = ['Balaji', 'Donovan', 'Andy', 'Jake', 'Dizzy', 'Backwards', 'Confused']
 
 export function updateAIOpponent(ai: AIOpponent, deltaTime: number): void {
+  // Special behavior for the spinning sperm
+  if (ai.name === 'Dizzy') {
+    // Just spin in place
+    ai.rotation += 360 * deltaTime; // Spin at 360 degrees per second
+    
+    // Add some small random movement
+    ai.acceleration.x = Math.sin(Date.now() / 1000) * ai.speed * 0.2;
+    ai.acceleration.y = Math.cos(Date.now() / 1000) * ai.speed * 0.2;
+    
+    return;
+  }
+  
+  // Special behavior for confused sperm - random direction changes
+  if (ai.name === 'Confused') {
+    // Change direction randomly
+    if (Math.random() < 0.05) { // 5% chance per frame to change direction
+      ai.acceleration.x = (Math.random() - 0.5) * ai.speed * 2;
+      ai.acceleration.y = (Math.random() - 0.5) * ai.speed * 2;
+      // Set random rotation
+      ai.rotation = Math.random() * 360;
+    }
+    return;
+  }
+  
   // Check if AI has waypoints
   if (ai.waypoints.length === 0) return
   
@@ -62,7 +86,7 @@ export function generateAIOpponents(
   count: number,
   startPosition: Vector2D,
   waypoints: Vector2D[],
-  colors: string[] = ['red', 'blue', 'green', 'yellow', 'purple']
+  colors: string[] = ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'cyan']
 ): AIOpponent[] {
   const opponents: AIOpponent[] = []
   
@@ -71,12 +95,50 @@ export function generateAIOpponents(
     const row = Math.floor(i / 2)
     const col = i % 2
     
+    // CPU name for this opponent
+    const name = CPU_NAMES[i % CPU_NAMES.length]
+    
+    // Create a reversed waypoint path for Jake (making him go the wrong way)
+    let opponentWaypoints
+    let startPos = { ...startPosition }
+    
+    if (name === 'Jake') {
+      // Reverse the waypoints array for Jake to make him go the wrong direction
+      opponentWaypoints = [...waypoints].reverse()
+      
+      // Offset Jake's position slightly to avoid immediate collisions
+      startPos = {
+        x: startPosition.x + 50,
+        y: startPosition.y - 30
+      }
+    } else if (name === 'Dizzy') {
+      // Dizzy will spin in place mid-course
+      opponentWaypoints = [...waypoints]
+      
+      // Position Dizzy in the middle of the track
+      startPos = {
+        x: startPosition.x + 20,
+        y: startPosition.y + 10
+      }
+    } else if (name === 'Confused') {
+      // Confused sperm gets random waypoints
+      opponentWaypoints = [...waypoints].sort(() => Math.random() - 0.5)
+      
+      // Start further back
+      startPos = {
+        x: startPosition.x - 30,
+        y: startPosition.y + 40
+      }
+    } else {
+      opponentWaypoints = [...waypoints]
+    }
+    
     const opponent: AIOpponent = {
       id: `ai-${i}`,
-      name: CPU_NAMES[i % CPU_NAMES.length], // Assign a name from the preset list
+      name: name,
       position: {
-        x: startPosition.x + col * 30, // 30 pixels apart horizontally
-        y: startPosition.y + row * 30  // 30 pixels apart vertically
+        x: startPos.x + col * 30, // 30 pixels apart horizontally
+        y: startPos.y + row * 30  // 30 pixels apart vertically
       },
       velocity: { x: 0, y: 0 },
       acceleration: { x: 0, y: 0 },
@@ -88,11 +150,20 @@ export function generateAIOpponents(
       maxSpeed: 200 + Math.random() * 100, // Max speed with some randomness
       friction: 0.1 + Math.random() * 0.1, // Friction with some randomness
       colliding: false,
-      waypoints: [...waypoints], // Copy the waypoints
+      waypoints: opponentWaypoints, // Use the appropriate waypoints
       currentWaypoint: 0,
       difficulty: 0.5 + Math.random() * 0.5, // Random difficulty 0.5-1.0
       laps: 0,
       lapTimes: []
+    }
+    
+    // Special settings for special sperms
+    if (name === 'Dizzy') {
+      opponent.speed = 50; // Slower speed
+      opponent.color = '#FF00FF'; // Bright magenta to stand out
+    } else if (name === 'Confused') {
+      opponent.friction = 0.2; // More friction
+      opponent.color = '#FFFF00'; // Yellow
     }
     
     opponents.push(opponent)
