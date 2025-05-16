@@ -100,6 +100,84 @@ export default function Game() {
   const requestAnimationFrameRef = useRef<number>(0)
   const nextCheckpointRef = useRef<number>(0)
   
+  // Store tail wave animation data
+  const tailWaveRef = useRef<{
+    offset: number;
+    opponents: Record<string, {
+      segments: { x: number, y: number }[];
+      lastPositions: { x: number, y: number }[];
+    }>;
+    player: {
+      segments: { x: number, y: number }[];
+      lastPositions: { x: number, y: number }[];
+    };
+  }>({
+    offset: 0,
+    opponents: {},
+    player: {
+      segments: Array(8).fill(0).map(() => ({ x: 0, y: 0 })),
+      lastPositions: Array(8).fill(0).map(() => ({ x: 0, y: 0 }))
+    }
+  });
+  
+  // Initialize tail animation data for new entities
+  const initTailData = useCallback((entityId: string) => {
+    if (!tailWaveRef.current.opponents[entityId]) {
+      tailWaveRef.current.opponents[entityId] = {
+        segments: Array(8).fill(0).map(() => ({ x: 0, y: 0 })),
+        lastPositions: Array(8).fill(0).map(() => ({ x: 0, y: 0 }))
+      };
+    }
+  }, []);
+  
+  // Update tail wave animation in the game loop
+  const updateTailAnimation = (deltaTime: number) => {
+    // Update wave offset for animation
+    tailWaveRef.current.offset += deltaTime * 10;
+    if (tailWaveRef.current.offset > 100) {
+      tailWaveRef.current.offset = 0;
+    }
+    
+    // Update player tail
+    const playerPos = gameContextRef.current.player.position;
+    const playerCenter = {
+      x: playerPos.x + gameContextRef.current.player.width / 2,
+      y: playerPos.y + gameContextRef.current.player.height / 2
+    };
+    
+    // Record current position
+    tailWaveRef.current.player.lastPositions.unshift({
+      x: playerCenter.x,
+      y: playerCenter.y
+    });
+    
+    // Keep only the most recent positions
+    if (tailWaveRef.current.player.lastPositions.length > 8) {
+      tailWaveRef.current.player.lastPositions.pop();
+    }
+    
+    // Update opponent tails
+    gameContextRef.current.opponents.forEach(opponent => {
+      initTailData(opponent.id);
+      
+      const opponentCenter = {
+        x: opponent.position.x + opponent.width / 2,
+        y: opponent.position.y + opponent.height / 2
+      };
+      
+      // Record current position
+      tailWaveRef.current.opponents[opponent.id].lastPositions.unshift({
+        x: opponentCenter.x,
+        y: opponentCenter.y
+      });
+      
+      // Keep only the most recent positions
+      if (tailWaveRef.current.opponents[opponent.id].lastPositions.length > 8) {
+        tailWaveRef.current.opponents[opponent.id].lastPositions.pop();
+      }
+    });
+  };
+  
   // Handle joystick controls
   const handleJoystickMove = useCallback((angle: number, force: number) => {
     applyJoystickControl(gameContextRef.current.player, angle, force)
@@ -263,6 +341,9 @@ export default function Game() {
           checkTrackCollisions(opponent, gameContextRef.current.track)
         })
         
+        // Update tail animations
+        updateTailAnimation(deltaTime)
+        
         // Check checkpoints
         const currentCheckpoint = gameContextRef.current.track.checkpoints[nextCheckpointRef.current]
         const nextCheckpointIndex = (nextCheckpointRef.current + 1) % gameContextRef.current.track.checkpoints.length
@@ -403,73 +484,139 @@ export default function Game() {
   const renderEntities = (ctx: CanvasRenderingContext2D) => {
     // Draw AI opponents
     gameContextRef.current.opponents.forEach(opponent => {
-      ctx.save()
+      ctx.save();
       
       // Translate to center of opponent
-      ctx.translate(
-        opponent.position.x + opponent.width / 2, 
-        opponent.position.y + opponent.height / 2
-      )
+      const centerX = opponent.position.x + opponent.width / 2;
+      const centerY = opponent.position.y + opponent.height / 2;
+      ctx.translate(centerX, centerY);
       
       // Rotate based on opponent's rotation
-      ctx.rotate((opponent.rotation * Math.PI) / 180)
+      ctx.rotate((opponent.rotation * Math.PI) / 180);
       
       // Draw opponent "sperm" body
-      ctx.fillStyle = opponent.color
+      const headRadius = opponent.width / 1.5;
       
-      // Draw the tail
-      ctx.beginPath()
-      ctx.moveTo(-opponent.width / 2, 0)
-      ctx.lineTo(-opponent.width * 1.5, -opponent.height / 4)
-      ctx.lineTo(-opponent.width * 1.5, opponent.height / 4)
-      ctx.closePath()
-      ctx.fill()
+      // Draw the tail (wiggly)
+      ctx.strokeStyle = opponent.color;
+      ctx.lineWidth = headRadius / 2.5;
+      ctx.lineCap = 'round';
+      
+      // Get position data for this opponent
+      const opponentTail = tailWaveRef.current.opponents[opponent.id];
+      if (opponentTail && opponentTail.lastPositions.length > 1) {
+        const positions = opponentTail.lastPositions;
+        
+        ctx.beginPath();
+        // Start from the back of the head
+        ctx.moveTo(-headRadius / 2, 0);
+        
+        // Create a path through previous positions with wave effect
+        for (let i = 0; i < positions.length - 1; i++) {
+          // Add a sine wave effect to the tail
+          const waveAmplitude = headRadius / 3 * (1 - i / positions.length);
+          const wavePhase = tailWaveRef.current.offset + i * 1.5;
+          const waveY = Math.sin(wavePhase) * waveAmplitude;
+          
+          // Draw tail segment
+          const segmentX = -headRadius - (i + 1) * headRadius / 2;
+          const segmentY = waveY;
+          
+          ctx.lineTo(segmentX, segmentY);
+        }
+        
+        // Taper the tail width
+        ctx.strokeStyle = opponent.color;
+        const gradient = ctx.createLinearGradient(-headRadius / 2, 0, -headRadius * 5, 0);
+        gradient.addColorStop(0, opponent.color);
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.strokeStyle = gradient;
+        
+        ctx.stroke();
+      }
       
       // Draw the head (circle)
-      ctx.beginPath()
-      ctx.arc(opponent.width / 4, 0, opponent.width / 2, 0, Math.PI * 2)
-      ctx.fill()
+      const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, headRadius);
+      headGradient.addColorStop(0, opponent.color);
+      headGradient.addColorStop(1, shadeColor(opponent.color, -20));
+      ctx.fillStyle = headGradient;
       
-      ctx.restore()
-    })
+      ctx.beginPath();
+      ctx.arc(0, 0, headRadius, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.restore();
+    });
     
     // Draw player
-    const player = gameContextRef.current.player
-    ctx.save()
+    const player = gameContextRef.current.player;
+    ctx.save();
     
     // Translate to center of player
-    ctx.translate(
-      player.position.x + player.width / 2, 
-      player.position.y + player.height / 2
-    )
+    const playerCenterX = player.position.x + player.width / 2;
+    const playerCenterY = player.position.y + player.height / 2;
+    ctx.translate(playerCenterX, playerCenterY);
     
     // Rotate based on player's rotation
-    ctx.rotate((player.rotation * Math.PI) / 180)
+    ctx.rotate((player.rotation * Math.PI) / 180);
     
-    // Draw player "sperm" body
-    ctx.fillStyle = player.color
+    // Draw player "sperm" with more detailed appearance
+    const headRadius = player.width / 1.5;
     
-    // Draw the tail
-    ctx.beginPath()
-    ctx.moveTo(-player.width / 2, 0)
-    ctx.lineTo(-player.width * 1.5, -player.height / 4)
-    ctx.lineTo(-player.width * 1.5, player.height / 4)
-    ctx.closePath()
-    ctx.fill()
+    // Draw the wiggly tail
+    ctx.strokeStyle = player.color;
+    ctx.lineWidth = headRadius / 2.5;
+    ctx.lineCap = 'round';
     
-    // Draw the head (circle)
-    ctx.beginPath()
-    ctx.arc(player.width / 4, 0, player.width / 2, 0, Math.PI * 2)
-    ctx.fill()
+    const playerTail = tailWaveRef.current.player;
+    if (playerTail.lastPositions.length > 1) {
+      const positions = playerTail.lastPositions;
+      
+      ctx.beginPath();
+      // Start from the back of the head
+      ctx.moveTo(-headRadius / 2, 0);
+      
+      // Create path through previous positions with wave effect
+      for (let i = 0; i < positions.length - 1; i++) {
+        // Add a sine wave effect to the tail
+        const waveAmplitude = headRadius / 3 * (1 - i / positions.length);
+        const wavePhase = tailWaveRef.current.offset + i * 1.5;
+        const waveY = Math.sin(wavePhase) * waveAmplitude;
+        
+        // Draw tail segment
+        const segmentX = -headRadius - (i + 1) * headRadius / 2;
+        const segmentY = waveY;
+        
+        ctx.lineTo(segmentX, segmentY);
+      }
+      
+      // Taper the tail width with gradient
+      const gradient = ctx.createLinearGradient(-headRadius / 2, 0, -headRadius * 5, 0);
+      gradient.addColorStop(0, player.color);
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.strokeStyle = gradient;
+      
+      ctx.stroke();
+    }
+    
+    // Draw the head (circle) with gradient
+    const headGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, headRadius);
+    headGradient.addColorStop(0, player.color);
+    headGradient.addColorStop(1, shadeColor(player.color, -20));
+    ctx.fillStyle = headGradient;
+    
+    ctx.beginPath();
+    ctx.arc(0, 0, headRadius, 0, Math.PI * 2);
+    ctx.fill();
     
     // Add a highlight to the player's head
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
-    ctx.beginPath()
-    ctx.arc(player.width / 4 - player.width / 6, -player.width / 6, player.width / 6, 0, Math.PI * 2)
-    ctx.fill()
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.beginPath();
+    ctx.arc(-headRadius / 5, -headRadius / 5, headRadius / 4, 0, Math.PI * 2);
+    ctx.fill();
     
-    ctx.restore()
-  }
+    ctx.restore();
+  };
   
   const renderHUD = (ctx: CanvasRenderingContext2D) => {
     // Draw semi-transparent background for better readability
@@ -718,6 +865,33 @@ export default function Game() {
       ctx.fillText('Press SPACE to try again', width / 2, height / 2 + 80)
     }
   }
+  
+  // Helper function to darken/lighten colors
+  const shadeColor = (color: string, percent: number): string => {
+    if (color.startsWith('#')) {
+      let R = parseInt(color.substring(1, 3), 16);
+      let G = parseInt(color.substring(3, 5), 16);
+      let B = parseInt(color.substring(5, 7), 16);
+
+      R = Math.floor(R * (100 + percent) / 100);
+      G = Math.floor(G * (100 + percent) / 100);
+      B = Math.floor(B * (100 + percent) / 100);
+
+      R = (R < 255) ? R : 255;
+      G = (G < 255) ? G : 255;
+      B = (B < 255) ? B : 255;
+
+      R = (R > 0) ? R : 0;
+      G = (G > 0) ? G : 0;
+      B = (B > 0) ? B : 0;
+
+      return `#${(R.toString(16).padStart(2, '0'))
+        }${G.toString(16).padStart(2, '0')
+        }${B.toString(16).padStart(2, '0')}`;
+    } else {
+      return color;
+    }
+  };
   
   // Handle touch for mobile devices
   const handleTouch = useCallback(() => {

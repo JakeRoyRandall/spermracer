@@ -1,5 +1,8 @@
 import { AIOpponent, Vector2D } from '../../types'
 
+// CPU player names
+const CPU_NAMES = ['Balaji', 'Donovan', 'Andy', 'Jake']
+
 export function updateAIOpponent(ai: AIOpponent, deltaTime: number): void {
   // Check if AI has waypoints
   if (ai.waypoints.length === 0) return
@@ -70,6 +73,7 @@ export function generateAIOpponents(
     
     const opponent: AIOpponent = {
       id: `ai-${i}`,
+      name: CPU_NAMES[i % CPU_NAMES.length], // Assign a name from the preset list
       position: {
         x: startPosition.x + col * 30, // 30 pixels apart horizontally
         y: startPosition.y + row * 30  // 30 pixels apart vertically
