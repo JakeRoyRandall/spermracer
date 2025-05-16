@@ -1,22 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sperm Racer
+
+A cartoon-style, top-down racing game designed for mobile browsers. Players control a character navigating a short track against AI opponents, trying to achieve the best time.
+
+## Features
+
+- Mobile-friendly with virtual joystick controls
+- Cartoon visual style
+- AI opponents
+- Time-based racing
+- Horizontal gameplay optimized for mobile
+- Single race track (expandable)
+
+## Tech Stack
+
+- Next.js 14
+- TypeScript
+- Tailwind CSS
+- Shadcn UI for UI components
+- Canvas API for game rendering
+- NippleJS for virtual joystick
+
+## Development Plan
+
+### Phase 1: Setup & Core Engine
+- [x] Project initialization
+- [ ] Game canvas setup
+- [ ] Basic physics engine
+- [ ] Player movement
+
+### Phase 2: Player Controls & Track
+- [ ] Virtual joystick implementation
+- [ ] Character design and animation
+- [ ] Track design
+- [ ] Collision detection
+
+### Phase 3: Game Logic & AI
+- [ ] Race timing system
+- [ ] AI opponent behavior
+- [ ] Game states (start, racing, finish)
+- [ ] Score tracking
+
+### Phase 4: Polish & Launch
+- [ ] Visual effects and animations
+- [ ] Sound effects
+- [ ] Performance optimization
+- [ ] Responsive testing
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Visit http://localhost:3000 to view the game.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
