@@ -59,7 +59,6 @@ export default function Game() {
   const [gameState, setGameState] = useState<GameState>('title')
   const [showJoystick, setShowJoystick] = useState(false)
   const [countdown, setCountdown] = useState(3)
-  const [, setTime] = useState(0)
   const [bestTime, setBestTime] = useState<number | null>(null)
   
   const gameContextRef = useRef<GameContext>({
@@ -309,7 +308,7 @@ export default function Game() {
         // Render everything
         renderTrack(ctx)
         renderEntities(ctx)
-        renderHUD(ctx, canvas)
+        renderHUD(ctx)
         break
       case 'finished':
         renderTrack(ctx)
@@ -326,12 +325,23 @@ export default function Game() {
   
   // Render functions
   const renderTrack = (ctx: CanvasRenderingContext2D) => {
-    // Draw outer track
-    ctx.fillStyle = '#333'
+    // Draw outer track (representing the reproductive tract)
+    ctx.fillStyle = '#FF90B3' // Pink color for reproductive tract
     ctx.fillRect(0, 0, track.width, track.height)
     
-    // Draw inner track (grass)
-    ctx.fillStyle = '#005500'
+    // Create a pattern for the background
+    ctx.fillStyle = '#E56B9F' // Slightly darker pink
+    for (let x = 0; x < track.width; x += 30) {
+      for (let y = 0; y < track.height; y += 30) {
+        // Create a wavy pattern
+        if ((x + y) % 60 === 0) {
+          ctx.fillRect(x, y, 15, 15)
+        }
+      }
+    }
+    
+    // Draw inner track (representing the center pathway)
+    ctx.fillStyle = '#FFDDE5' // Lighter pink
     ctx.fillRect(
       trackWallThickness * 4, 
       trackWallThickness * 2, 
@@ -339,18 +349,35 @@ export default function Game() {
       track.height - trackWallThickness * 4
     )
     
+    // Add texture to the inner track
+    ctx.fillStyle = '#FFE6ED' // Even lighter pink
+    for (let x = trackWallThickness * 4; x < track.width - trackWallThickness * 4; x += 20) {
+      for (let y = trackWallThickness * 2; y < track.height - trackWallThickness * 2; y += 20) {
+        if ((x + y) % 40 === 0) {
+          ctx.fillRect(x, y, 10, 10)
+        }
+      }
+    }
+    
     // Draw checkpoints
-    ctx.fillStyle = 'rgba(255, 255, 0, 0.2)'
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'
     for (let i = 0; i < track.checkpoints.length; i++) {
       const checkpoint = track.checkpoints[i]
       const nextCheckpoint = track.checkpoints[(i + 1) % track.checkpoints.length]
+      
+      // Highlight the current checkpoint the player needs to reach
+      if (i === nextCheckpointRef.current) {
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)'
+      } else {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'
+      }
       
       ctx.beginPath()
       ctx.arc(checkpoint.x, checkpoint.y, checkpointRadius, 0, Math.PI * 2)
       ctx.fill()
       
       // Draw line to next checkpoint
-      ctx.strokeStyle = 'rgba(255, 255, 0, 0.2)'
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)'
       ctx.lineWidth = 2
       ctx.beginPath()
       ctx.moveTo(checkpoint.x, checkpoint.y)
@@ -365,6 +392,12 @@ export default function Game() {
     ctx.moveTo(track.startLine.start.x, track.startLine.start.y)
     ctx.lineTo(track.startLine.end.x, track.startLine.end.y)
     ctx.stroke()
+    
+    // Add "START" text
+    ctx.fillStyle = '#fff'
+    ctx.font = '12px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('START', (track.startLine.start.x + track.startLine.end.x) / 2, track.startLine.start.y - 5)
   }
   
   const renderEntities = (ctx: CanvasRenderingContext2D) => {
@@ -381,13 +414,21 @@ export default function Game() {
       // Rotate based on opponent's rotation
       ctx.rotate((opponent.rotation * Math.PI) / 180)
       
-      // Draw opponent body
+      // Draw opponent "sperm" body
       ctx.fillStyle = opponent.color
-      ctx.fillRect(-opponent.width / 2, -opponent.height / 2, opponent.width, opponent.height)
       
-      // Draw opponent direction indicator
-      ctx.fillStyle = '#000'
-      ctx.fillRect(opponent.width / 4, -opponent.height / 2, opponent.width / 4, opponent.height / 4)
+      // Draw the tail
+      ctx.beginPath()
+      ctx.moveTo(-opponent.width / 2, 0)
+      ctx.lineTo(-opponent.width * 1.5, -opponent.height / 4)
+      ctx.lineTo(-opponent.width * 1.5, opponent.height / 4)
+      ctx.closePath()
+      ctx.fill()
+      
+      // Draw the head (circle)
+      ctx.beginPath()
+      ctx.arc(opponent.width / 4, 0, opponent.width / 2, 0, Math.PI * 2)
+      ctx.fill()
       
       ctx.restore()
     })
@@ -405,35 +446,76 @@ export default function Game() {
     // Rotate based on player's rotation
     ctx.rotate((player.rotation * Math.PI) / 180)
     
-    // Draw player body
+    // Draw player "sperm" body
     ctx.fillStyle = player.color
-    ctx.fillRect(-player.width / 2, -player.height / 2, player.width, player.height)
     
-    // Draw player direction indicator
-    ctx.fillStyle = '#000'
-    ctx.fillRect(player.width / 4, -player.height / 2, player.width / 4, player.height / 4)
+    // Draw the tail
+    ctx.beginPath()
+    ctx.moveTo(-player.width / 2, 0)
+    ctx.lineTo(-player.width * 1.5, -player.height / 4)
+    ctx.lineTo(-player.width * 1.5, player.height / 4)
+    ctx.closePath()
+    ctx.fill()
+    
+    // Draw the head (circle)
+    ctx.beginPath()
+    ctx.arc(player.width / 4, 0, player.width / 2, 0, Math.PI * 2)
+    ctx.fill()
+    
+    // Add a highlight to the player's head
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+    ctx.beginPath()
+    ctx.arc(player.width / 4 - player.width / 6, -player.width / 6, player.width / 6, 0, Math.PI * 2)
+    ctx.fill()
     
     ctx.restore()
   }
   
-  const renderHUD = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+  const renderHUD = (ctx: CanvasRenderingContext2D) => {
+    // Draw semi-transparent background for better readability
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.fillRect(0, 0, 160, 100)
+    
     ctx.fillStyle = '#fff'
     ctx.font = '16px Arial'
     ctx.textAlign = 'left'
     
     // Draw lap counter
-    ctx.fillText(`Lap: ${gameContextRef.current.player.laps + 1}/3`, 10, 20)
+    ctx.fillText(`Lap: ${gameContextRef.current.player.laps + 1}/3`, 10, 25)
     
     // Draw timer
-    ctx.fillText(`Time: ${formatTime(gameContextRef.current.time)}`, 10, 40)
+    ctx.fillText(`Time: ${formatTime(gameContextRef.current.time)}`, 10, 50)
     
     // Draw current lap time
-    ctx.fillText(`Lap Time: ${formatTime(gameContextRef.current.player.currentLapTime)}`, 10, 60)
+    ctx.fillText(`Lap Time: ${formatTime(gameContextRef.current.player.currentLapTime)}`, 10, 75)
     
     // Draw best lap time if available
     if (gameContextRef.current.player.bestLapTime !== null) {
-      ctx.fillText(`Best Lap: ${formatTime(gameContextRef.current.player.bestLapTime)}`, 10, 80)
+      ctx.fillRect(0, 100, 160, 25)
+      ctx.fillStyle = '#FFFF00' // Yellow for best time
+      ctx.fillText(`Best Lap: ${formatTime(gameContextRef.current.player.bestLapTime)}`, 10, 120)
     }
+    
+    // Add position indicator (simplified)
+    const positions = [...gameContextRef.current.opponents, gameContextRef.current.player]
+      .sort((a, b) => b.laps - a.laps)
+    
+    const playerRank = positions.findIndex(entity => entity.id === gameContextRef.current.player.id) + 1
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'
+    ctx.fillRect(track.width - 80, 0, 80, 40)
+    ctx.fillStyle = playerRank === 1 ? '#FFD700' : '#fff' // Gold for 1st place
+    ctx.font = '18px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText(`${playerRank}${getRankSuffix(playerRank)} Place`, track.width - 40, 25)
+  }
+  
+  // Helper function for rank suffixes
+  const getRankSuffix = (rank: number): string => {
+    if (rank === 1) return 'st'
+    if (rank === 2) return 'nd'
+    if (rank === 3) return 'rd'
+    return 'th'
   }
   
   const renderTitleScreen = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
