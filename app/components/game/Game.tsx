@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Canvas from './Canvas'
 import Joystick from './Joystick'
-import { GameContext, GameState, Track, Vector2D } from '../../types'
+import { GameContext, GameState, Track, Vector2D, PowerUp } from '../../types'
 import { generateId, formatTime, isMobile } from '../../lib/utils'
 import { updateEntityPhysics, applyPlayerControls, applyJoystickControl } from '../../lib/game-engine/physics'
 import { checkTrackCollisions, checkCheckpointCollision } from '../../lib/game-engine/collision'
@@ -11,13 +11,20 @@ import { updateAIOpponent, generateAIOpponents } from '../../lib/game-engine/ai'
 
 // Track definition (a longer track that takes more time to complete)
 const trackWidth = 2000
-const trackHeight = 4000
+const trackHeight = 6000 // Even longer track
 const checkpointRadius = 50
 
 // Egg finish area configuration
 const eggPosition = { x: trackWidth / 2, y: trackHeight - 300 }
 const eggRadius = 300 // Much larger egg
 
+// Power-up configuration
+const powerUpRadius = 25
+const boostDuration = 3000 // 3 seconds of speed boost
+const slowdownDuration = 5000 // 5 seconds of slowdown
+const powerUpRespawnTime = 10000 // 10 seconds to respawn
+
+// Create a narrower, curved track with clear boundaries
 const track: Track = {
   width: trackWidth,
   height: trackHeight,
@@ -28,65 +35,140 @@ const track: Track = {
     { start: { x: trackWidth, y: trackHeight }, end: { x: 0, y: trackHeight } },
     { start: { x: 0, y: trackHeight }, end: { x: 0, y: 0 } },
     
-    // Inner path walls - create a winding path
-    // First section - entry tube
-    { start: { x: trackWidth / 2 - 200, y: 0 }, end: { x: trackWidth / 2 - 200, y: 600 } },
-    { start: { x: trackWidth / 2 + 200, y: 0 }, end: { x: trackWidth / 2 + 200, y: 600 } },
+    // Entry tube - narrower
+    { start: { x: trackWidth / 2 - 100, y: 0 }, end: { x: trackWidth / 2 - 100, y: 500 } },
+    { start: { x: trackWidth / 2 + 100, y: 0 }, end: { x: trackWidth / 2 + 100, y: 500 } },
     
-    // Second section - first winding path
-    { start: { x: trackWidth / 2 - 200, y: 600 }, end: { x: 300, y: 800 } },
-    { start: { x: trackWidth / 2 + 200, y: 600 }, end: { x: trackWidth - 300, y: 800 } },
-    { start: { x: 300, y: 800 }, end: { x: 300, y: 1200 } },
-    { start: { x: trackWidth - 300, y: 800 }, end: { x: trackWidth - 300, y: 1200 } },
+    // First curve - right turn
+    { start: { x: trackWidth / 2 - 100, y: 500 }, end: { x: trackWidth - 300, y: 800 } },
+    { start: { x: trackWidth / 2 + 100, y: 500 }, end: { x: trackWidth - 150, y: 900 } },
     
-    // Third section - narrowing middle section
-    { start: { x: 300, y: 1200 }, end: { x: trackWidth / 2 - 150, y: 1600 } },
-    { start: { x: trackWidth - 300, y: 1200 }, end: { x: trackWidth / 2 + 150, y: 1600 } },
-    { start: { x: trackWidth / 2 - 150, y: 1600 }, end: { x: trackWidth / 2 - 150, y: 2000 } },
-    { start: { x: trackWidth / 2 + 150, y: 1600 }, end: { x: trackWidth / 2 + 150, y: 2000 } },
+    // Path along right side
+    { start: { x: trackWidth - 300, y: 800 }, end: { x: trackWidth - 300, y: 1500 } },
+    { start: { x: trackWidth - 150, y: 900 }, end: { x: trackWidth - 150, y: 1500 } },
     
-    // Fourth section - winding path to egg
-    { start: { x: trackWidth / 2 - 150, y: 2000 }, end: { x: trackWidth / 4, y: 2400 } },
-    { start: { x: trackWidth / 2 + 150, y: 2000 }, end: { x: trackWidth * 3/4, y: 2400 } },
-    { start: { x: trackWidth / 4, y: 2400 }, end: { x: trackWidth / 4, y: 3000 } },
-    { start: { x: trackWidth * 3/4, y: 2400 }, end: { x: trackWidth * 3/4, y: 3000 } },
+    // Second curve - left turn
+    { start: { x: trackWidth - 300, y: 1500 }, end: { x: trackWidth / 2, y: 1800 } },
+    { start: { x: trackWidth - 150, y: 1500 }, end: { x: trackWidth / 2 + 100, y: 1900 } },
     
-    // Final section - path to egg
-    { start: { x: trackWidth / 4, y: 3000 }, end: { x: trackWidth / 2 - 200, y: 3500 } },
-    { start: { x: trackWidth * 3/4, y: 3000 }, end: { x: trackWidth / 2 + 200, y: 3500 } },
+    // Center path
+    { start: { x: trackWidth / 2, y: 1800 }, end: { x: trackWidth / 2, y: 2500 } },
+    { start: { x: trackWidth / 2 + 100, y: 1900 }, end: { x: trackWidth / 2 + 200, y: 2500 } },
+    
+    // Third curve - left turn
+    { start: { x: trackWidth / 2, y: 2500 }, end: { x: 300, y: 2800 } },
+    { start: { x: trackWidth / 2 + 200, y: 2500 }, end: { x: 450, y: 2900 } },
+    
+    // Path along left side
+    { start: { x: 300, y: 2800 }, end: { x: 300, y: 3500 } },
+    { start: { x: 450, y: 2900 }, end: { x: 450, y: 3500 } },
+    
+    // Fourth curve - right turn
+    { start: { x: 300, y: 3500 }, end: { x: trackWidth / 2 - 150, y: 3800 } },
+    { start: { x: 450, y: 3500 }, end: { x: trackWidth / 2 - 50, y: 3900 } },
+    
+    // Path to loop
+    { start: { x: trackWidth / 2 - 150, y: 3800 }, end: { x: trackWidth / 2 - 150, y: 4300 } },
+    { start: { x: trackWidth / 2 - 50, y: 3900 }, end: { x: trackWidth / 2 - 50, y: 4300 } },
+    
+    // Loop start
+    { start: { x: trackWidth / 2 - 150, y: 4300 }, end: { x: trackWidth / 2 - 300, y: 4500 } },
+    { start: { x: trackWidth / 2 - 50, y: 4300 }, end: { x: trackWidth / 2 + 300, y: 4500 } },
+    
+    // Loop lower part
+    { start: { x: trackWidth / 2 - 300, y: 4500 }, end: { x: trackWidth / 2 - 300, y: 4700 } },
+    { start: { x: trackWidth / 2 + 300, y: 4500 }, end: { x: trackWidth / 2 + 300, y: 4700 } },
+    
+    // Loop end
+    { start: { x: trackWidth / 2 - 300, y: 4700 }, end: { x: trackWidth / 2 - 150, y: 4900 } },
+    { start: { x: trackWidth / 2 + 300, y: 4700 }, end: { x: trackWidth / 2 + 150, y: 4900 } },
+    
+    // Final stretch to egg
+    { start: { x: trackWidth / 2 - 150, y: 4900 }, end: { x: trackWidth / 2 - 250, y: 5500 } },
+    { start: { x: trackWidth / 2 + 150, y: 4900 }, end: { x: trackWidth / 2 + 250, y: 5500 } },
   ],
   checkpoints: [
     // Place checkpoints along the path
     { x: trackWidth / 2, y: 300 },
-    { x: trackWidth / 2, y: 700 },
-    { x: 500, y: 1000 },
-    { x: trackWidth - 500, y: 1000 },
-    { x: trackWidth / 2, y: 1800 },
-    { x: trackWidth / 3, y: 2200 },
-    { x: trackWidth * 2/3, y: 2200 },
-    { x: trackWidth / 2, y: 2800 },
-    { x: trackWidth / 2, y: 3200 }
+    { x: trackWidth - 225, y: 1100 },
+    { x: trackWidth / 2 + 100, y: 2200 },
+    { x: 375, y: 3200 },
+    { x: trackWidth / 2 - 100, y: 4100 },
+    { x: trackWidth / 2, y: 4600 },
+    { x: trackWidth / 2, y: 5200 }
   ],
   startLine: {
-    start: { x: trackWidth / 2 - 150, y: 150 },
-    end: { x: trackWidth / 2 + 150, y: 150 }
+    start: { x: trackWidth / 2 - 100, y: 100 },
+    end: { x: trackWidth / 2 + 100, y: 100 }
   }
 }
 
-// Waypoints for AI opponents to follow
+// Waypoints for AI opponents to follow - follow the track's center path
 const aiWaypoints: Vector2D[] = [
-  // Follow the track's path
   { x: trackWidth / 2, y: 300 },
-  { x: trackWidth / 2, y: 700 },
-  { x: 500, y: 1000 },
-  { x: trackWidth - 500, y: 1000 },
-  { x: trackWidth / 2, y: 1800 },
-  { x: trackWidth / 3, y: 2200 },
-  { x: trackWidth * 2/3, y: 2200 },
-  { x: trackWidth / 2, y: 2800 },
-  { x: trackWidth / 2, y: 3200 },
-  { x: trackWidth / 2, y: 3700 } // Final waypoint at the egg
+  { x: trackWidth - 225, y: 1100 },
+  { x: trackWidth / 2 + 100, y: 2200 },
+  { x: 375, y: 3200 },
+  { x: trackWidth / 2 - 100, y: 4100 },
+  { x: trackWidth / 2, y: 4600 },
+  { x: trackWidth / 2, y: 5200 },
+  { x: trackWidth / 2, y: 5700 } // Final waypoint at the egg
 ]
+
+// Generate power-ups
+function generatePowerUps(): PowerUp[] {
+  const powerUps: PowerUp[] = []
+  
+  // Speed boost pills (blue) - place along the track
+  const boostPositions = [
+    { x: trackWidth / 2, y: 700 },
+    { x: trackWidth - 225, y: 1300 },
+    { x: trackWidth / 2 + 100, y: 2000 },
+    { x: 375, y: 3000 },
+    { x: trackWidth / 2 - 100, y: 3700 },
+    { x: trackWidth / 2 - 200, y: 4600 },
+    { x: trackWidth / 2 + 200, y: 4600 },
+    { x: trackWidth / 2, y: 5000 }
+  ]
+  
+  // Slowdown pills (white) - place at challenging spots
+  const slowdownPositions = [
+    { x: trackWidth - 225, y: 900 },
+    { x: trackWidth / 2 + 150, y: 1700 },
+    { x: trackWidth / 2 + 100, y: 2300 },
+    { x: 375, y: 3300 },
+    { x: trackWidth / 2 - 100, y: 4000 },
+    { x: trackWidth / 2, y: 4500 },
+    { x: trackWidth / 2, y: 4700 },
+    { x: trackWidth / 2, y: 5100 }
+  ]
+  
+  // Create speed boost power-ups
+  boostPositions.forEach((pos, index) => {
+    powerUps.push({
+      id: `boost-${index}`,
+      position: pos,
+      type: 'boost',
+      radius: powerUpRadius,
+      collected: false,
+      respawnTime: 0
+    })
+  })
+  
+  // Create slowdown power-ups
+  slowdownPositions.forEach((pos, index) => {
+    powerUps.push({
+      id: `slowdown-${index}`,
+      position: pos,
+      type: 'slowdown',
+      radius: powerUpRadius,
+      collected: false,
+      respawnTime: 0
+    })
+  })
+  
+  return powerUps
+}
 
 export default function Game() {
   const [gameState, setGameState] = useState<GameState>('title')
@@ -94,11 +176,15 @@ export default function Game() {
   const [countdown, setCountdown] = useState(3)
   const [bestTime, setBestTime] = useState<number | null>(null)
   const [playerName, setPlayerName] = useState<string>('')
+  const [nameInputActive, setNameInputActive] = useState(false)
   const [cameraPosition, setCameraPosition] = useState<Vector2D>({ x: 0, y: 0 })
   const [viewportSize, setViewportSize] = useState<{ width: number, height: number }>({ 
     width: 800, 
     height: 600 
   })
+  
+  // Input field reference
+  const nameInputRef = useRef<HTMLInputElement>(null)
   
   const gameContextRef = useRef<GameContext>({
     canvas: null,
@@ -127,10 +213,13 @@ export default function Game() {
       laps: 0,
       lapTimes: [],
       bestLapTime: null,
-      currentLapTime: 0
+      currentLapTime: 0,
+      speedBoostTime: 0,
+      slowDownTime: 0
     },
     opponents: [],
     track,
+    powerUps: generatePowerUps(),
     time: 0,
     bestTime: null,
     countdown: 3
@@ -250,8 +339,10 @@ export default function Game() {
         player.control.right = true
         break
       case ' ':
-        if (gameContextRef.current.gameState === 'title' || gameContextRef.current.gameState === 'gameOver') {
-          startGame()
+        if (gameContextRef.current.gameState === 'title') {
+          setGameState('nameEntry')
+          gameContextRef.current.gameState = 'nameEntry'
+          setTimeout(() => setNameInputActive(true), 100)
         }
         break
     }
@@ -286,14 +377,19 @@ export default function Game() {
     gameContextRef.current.ctx = ctx
   }, [])
   
+  // Start game after name entry
+  const handleNameSubmit = useCallback(() => {
+    const name = playerName.trim() || "You"
+    gameContextRef.current.player.name = name
+    setGameState('ready')
+    gameContextRef.current.gameState = 'ready'
+    startGame()
+  }, [playerName, startGame])
+  
   // Start a new game
   const startGame = useCallback(() => {
-    // Use the player's input name or default to "You"
-    const name = playerName.trim() || "You"
-    
     // Reset player state
     const { player } = gameContextRef.current
-    player.name = name
     player.position = { x: trackWidth / 2 - 10, y: 150 }
     player.velocity = { x: 0, y: 0 }
     player.acceleration = { x: 0, y: 0 }
@@ -302,12 +398,20 @@ export default function Game() {
     player.lapTimes = []
     player.bestLapTime = null
     player.currentLapTime = 0
+    player.speedBoostTime = 0
+    player.slowDownTime = 0
     
     // Generate AI opponents (7 total)
     gameContextRef.current.opponents = generateAIOpponents(7, 
       { x: trackWidth / 2 + 20, y: 150 }, 
       aiWaypoints
     )
+    
+    // Add speed boost and slowdown properties to opponents
+    gameContextRef.current.opponents.forEach(opponent => {
+      opponent.speedBoostTime = 0
+      opponent.slowDownTime = 0
+    })
     
     // Reset camera position
     setCameraPosition({ 
@@ -316,14 +420,15 @@ export default function Game() {
     })
     
     // Reset game state
-    setGameState('ready')
-    gameContextRef.current.gameState = 'ready'
     setCountdown(3)
     gameContextRef.current.countdown = 3
     gameContextRef.current.time = 0
     
     // Reset checkpoint tracking
     nextCheckpointRef.current = 0
+    
+    // Reset power-ups
+    gameContextRef.current.powerUps = generatePowerUps()
     
     // Start countdown
     const countdownInterval = setInterval(() => {
@@ -339,7 +444,7 @@ export default function Game() {
         return newCountdown
       })
     }, 1000)
-  }, [playerName, viewportSize.height, viewportSize.width])
+  }, [viewportSize.height, viewportSize.width])
   
   // Game loop
   const gameLoop = useCallback(() => {
@@ -386,6 +491,11 @@ export default function Game() {
         ctx.restore()
         renderTitleScreen(ctx, canvas)
         break
+      case 'nameEntry':
+        // Don't apply camera transform for UI screens
+        ctx.restore()
+        renderNameEntryScreen(ctx, canvas)
+        break
       case 'ready':
         renderTrack(ctx)
         renderEntities(ctx)
@@ -405,6 +515,17 @@ export default function Game() {
           applyPlayerControls(gameContextRef.current.player, deltaTime)
         }
         
+        // Apply speed modifications from power-ups for player
+        if (gameContextRef.current.player.speedBoostTime > 0) {
+          gameContextRef.current.player.speedBoostTime -= deltaTime * 1000
+          gameContextRef.current.player.maxSpeed = 450 // Boosted speed
+        } else if (gameContextRef.current.player.slowDownTime > 0) {
+          gameContextRef.current.player.slowDownTime -= deltaTime * 1000
+          gameContextRef.current.player.maxSpeed = 150 // Slowed speed
+        } else {
+          gameContextRef.current.player.maxSpeed = 300 // Normal speed
+        }
+        
         updateEntityPhysics(gameContextRef.current.player, deltaTime)
         
         // Check collisions with track
@@ -412,10 +533,24 @@ export default function Game() {
         
         // Update AI opponents
         gameContextRef.current.opponents.forEach(opponent => {
+          // Apply speed modifications from power-ups for AI
+          if (opponent.speedBoostTime > 0) {
+            opponent.speedBoostTime -= deltaTime * 1000
+            opponent.maxSpeed = 350 // Boosted speed (slightly less than player)
+          } else if (opponent.slowDownTime > 0) {
+            opponent.slowDownTime -= deltaTime * 1000
+            opponent.maxSpeed = 150 // Slowed speed
+          } else {
+            opponent.maxSpeed = 300 // Normal speed
+          }
+          
           updateAIOpponent(opponent, deltaTime)
           updateEntityPhysics(opponent, deltaTime)
           checkTrackCollisions(opponent, gameContextRef.current.track)
         })
+        
+        // Update power-ups
+        updatePowerUps(deltaTime)
         
         // Update tail animations
         updateTailAnimation(deltaTime)
@@ -470,6 +605,7 @@ export default function Game() {
         
         // Render everything
         renderTrack(ctx)
+        renderPowerUps(ctx)
         renderEggFinishArea(ctx)
         renderEntities(ctx)
         
@@ -498,6 +634,66 @@ export default function Game() {
     
     requestAnimationFrameRef.current = requestAnimationFrame(gameLoop)
   }, [showJoystick, bestTime, cameraPosition, viewportSize.height, viewportSize.width])
+  
+  // Update power-ups (respawn collected ones)
+  const updatePowerUps = (deltaTime: number) => {
+    const { player, opponents, powerUps } = gameContextRef.current
+    
+    powerUps.forEach(powerUp => {
+      // If already collected, update respawn timer
+      if (powerUp.collected) {
+        powerUp.respawnTime -= deltaTime * 1000
+        if (powerUp.respawnTime <= 0) {
+          powerUp.collected = false
+        }
+        return
+      }
+      
+      // Check collision with player
+      const distanceToPlayer = Math.sqrt(
+        Math.pow(player.position.x + player.width / 2 - powerUp.position.x, 2) +
+        Math.pow(player.position.y + player.height / 2 - powerUp.position.y, 2)
+      )
+      
+      if (distanceToPlayer < powerUp.radius + player.width / 2) {
+        // Collect power-up
+        powerUp.collected = true
+        powerUp.respawnTime = powerUpRespawnTime
+        
+        // Apply effect
+        if (powerUp.type === 'boost') {
+          player.speedBoostTime = boostDuration
+          player.slowDownTime = 0 // Cancel any slowdown effect
+        } else if (powerUp.type === 'slowdown') {
+          player.slowDownTime = slowdownDuration
+          player.speedBoostTime = 0 // Cancel any boost effect
+        }
+      }
+      
+      // Check collision with AI opponents
+      opponents.forEach(opponent => {
+        const distanceToOpponent = Math.sqrt(
+          Math.pow(opponent.position.x + opponent.width / 2 - powerUp.position.x, 2) +
+          Math.pow(opponent.position.y + opponent.height / 2 - powerUp.position.y, 2)
+        )
+        
+        if (distanceToOpponent < powerUp.radius + opponent.width / 2) {
+          // Collect power-up
+          powerUp.collected = true
+          powerUp.respawnTime = powerUpRespawnTime
+          
+          // Apply effect
+          if (powerUp.type === 'boost') {
+            opponent.speedBoostTime = boostDuration
+            opponent.slowDownTime = 0 // Cancel any slowdown effect
+          } else if (powerUp.type === 'slowdown') {
+            opponent.slowDownTime = slowdownDuration
+            opponent.speedBoostTime = 0 // Cancel any boost effect
+          }
+        }
+      })
+    })
+  }
   
   // Render the egg finish area
   const renderEggFinishArea = (ctx: CanvasRenderingContext2D) => {
@@ -987,6 +1183,114 @@ export default function Game() {
     return 'th'
   }
   
+  const renderNameEntryScreen = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
+    const width = canvas.width / window.devicePixelRatio
+    const height = canvas.height / window.devicePixelRatio
+    
+    // Create a background gradient
+    const gradient = ctx.createLinearGradient(0, 0, 0, height)
+    gradient.addColorStop(0, '#FF90B3')  // Pink color at top
+    gradient.addColorStop(1, '#FF5C8D')  // Darker pink color at bottom
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, width, height)
+    
+    // Add some swimming "sperm" particles in the background
+    for (let i = 0; i < 20; i++) {
+      const x = Math.random() * width
+      const y = Math.random() * height
+      const size = 3 + Math.random() * 7
+      
+      // Draw small swimming sperm cells
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'
+      ctx.beginPath()
+      ctx.arc(x, y, size, 0, Math.PI * 2)
+      ctx.fill()
+      
+      // Draw tail
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(x - size, y)
+      
+      // Wavy tail
+      for (let j = 1; j <= 5; j++) {
+        const amplitude = size / 2
+        const offset = j % 2 === 0 ? amplitude : -amplitude
+        ctx.lineTo(x - size - j * size * 1.5, y + offset)
+      }
+      
+      ctx.stroke()
+    }
+    
+    // Add title text
+    ctx.fillStyle = '#fff'
+    ctx.font = 'bold 48px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText('SPERM RACER', width / 2, height / 4)
+    
+    // Add name entry instructions
+    ctx.font = '24px Arial'
+    ctx.fillText('Enter Your Name:', width / 2, height / 2 - 60)
+    
+    // Draw a stylized input box
+    const inputBoxWidth = 300
+    const inputBoxHeight = 50
+    const inputBoxX = width / 2 - inputBoxWidth / 2
+    const inputBoxY = height / 2 - 30
+    
+    // Draw input box shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
+    ctx.fillRect(inputBoxX + 3, inputBoxY + 3, inputBoxWidth, inputBoxHeight)
+    
+    // Draw input box
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight)
+    
+    // Draw input box border
+    ctx.strokeStyle = '#FF5C8D'
+    ctx.lineWidth = 2
+    ctx.strokeRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight)
+    
+    // Draw player name
+    ctx.fillStyle = '#000'
+    ctx.textAlign = 'left'
+    ctx.font = '24px Arial'
+    ctx.fillText(playerName + (Math.floor(Date.now() / 500) % 2 === 0 ? '|' : ''), inputBoxX + 15, inputBoxY + 33)
+    
+    // Draw submit button
+    const buttonWidth = 150
+    const buttonHeight = 40
+    const buttonX = width / 2 - buttonWidth / 2
+    const buttonY = height / 2 + 50
+    
+    // Button shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
+    ctx.fillRect(buttonX + 3, buttonY + 3, buttonWidth, buttonHeight)
+    
+    // Button background
+    const buttonGradient = ctx.createLinearGradient(buttonX, buttonY, buttonX, buttonY + buttonHeight)
+    buttonGradient.addColorStop(0, '#FF5C8D')
+    buttonGradient.addColorStop(1, '#FF4070')
+    ctx.fillStyle = buttonGradient
+    ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight)
+    
+    // Button border
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 2
+    ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight)
+    
+    // Button text
+    ctx.fillStyle = '#fff'
+    ctx.textAlign = 'center'
+    ctx.font = '20px Arial'
+    ctx.fillText('START RACE', buttonX + buttonWidth / 2, buttonY + 27)
+    
+    // Draw instructions
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
+    ctx.font = '16px Arial'
+    ctx.fillText('Press ENTER to start the race', width / 2, height / 2 + 120)
+  }
+  
   const renderTitleScreen = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     const width = canvas.width / window.devicePixelRatio
     const height = canvas.height / window.devicePixelRatio
@@ -1036,61 +1340,45 @@ export default function Game() {
     ctx.font = '24px Arial'
     ctx.fillText('The Race to Fertilization', width / 2, height / 4 + 40)
     
-    // Add name input instruction
-    ctx.font = '20px Arial'
-    ctx.fillText('Enter your name:', width / 2, height / 2 - 40)
+    // Draw a play button
+    const buttonWidth = 200
+    const buttonHeight = 60
+    const buttonX = width / 2 - buttonWidth / 2
+    const buttonY = height / 2 - 30
     
-    // Draw a stylized input box
-    const inputBoxWidth = 250
-    const inputBoxHeight = 40
-    const inputBoxX = width / 2 - inputBoxWidth / 2
-    const inputBoxY = height / 2 - 20
-    
-    // Draw input box shadow
+    // Button shadow
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
-    ctx.fillRect(inputBoxX + 3, inputBoxY + 3, inputBoxWidth, inputBoxHeight)
+    ctx.fillRect(buttonX + 3, buttonY + 3, buttonWidth, buttonHeight)
     
-    // Draw input box
-    ctx.fillStyle = '#fff'
-    ctx.fillRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight)
+    // Button background
+    const buttonGradient = ctx.createLinearGradient(buttonX, buttonY, buttonX, buttonY + buttonHeight)
+    buttonGradient.addColorStop(0, '#FF5C8D')
+    buttonGradient.addColorStop(1, '#FF4070')
+    ctx.fillStyle = buttonGradient
+    ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight)
     
-    // Draw input box border
-    ctx.strokeStyle = '#FF5C8D'
+    // Button border
+    ctx.strokeStyle = '#fff'
     ctx.lineWidth = 2
-    ctx.strokeRect(inputBoxX, inputBoxY, inputBoxWidth, inputBoxHeight)
+    ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight)
     
-    // Draw player name
-    ctx.fillStyle = '#000'
-    ctx.textAlign = 'left'
-    ctx.font = '18px Arial'
-    ctx.fillText(playerName + (Math.floor(Date.now() / 500) % 2 === 0 ? '|' : ''), inputBoxX + 10, inputBoxY + 25)
-    
-    // Add start instructions
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    // Button text
+    ctx.fillStyle = '#fff'
     ctx.textAlign = 'center'
-    ctx.font = '20px Arial'
-    
-    if (isMobile()) {
-      ctx.fillText('Tap to Start', width / 2, height / 2 + 80)
-      ctx.font = '16px Arial'
-      ctx.fillText('Use the joystick to control', width / 2, height / 2 + 110)
-    } else {
-      ctx.fillText('Press SPACE to start', width / 2, height / 2 + 80)
-      ctx.font = '16px Arial'
-      ctx.fillText('Use arrow keys or WASD to control', width / 2, height / 2 + 110)
-    }
+    ctx.font = '24px Arial'
+    ctx.fillText('PLAY GAME', buttonX + buttonWidth / 2, buttonY + 38)
     
     // Add best time if available
     if (bestTime) {
       ctx.fillStyle = '#FFD700'  // Gold color
       ctx.font = 'bold 18px Arial'
-      ctx.fillText(`Best Time: ${formatTime(bestTime)}`, width / 2, height / 2 + 150)
+      ctx.fillText(`Best Time: ${formatTime(bestTime)}`, width / 2, height / 2 + 80)
     }
     
     // Add game instructions
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
     ctx.font = '14px Arial'
-    ctx.fillText('Race through the checkpoints', width / 2, height - 60)
+    ctx.fillText('Race through the fallopian tube', width / 2, height - 60)
     ctx.fillText('Reach the egg at the end to win!', width / 2, height - 40)
   }
   
@@ -1247,27 +1535,79 @@ export default function Game() {
   
   // Handle name input
   const handleNameInput = useCallback((e: KeyboardEvent) => {
-    if (gameContextRef.current.gameState !== 'title') return
+    if (gameContextRef.current.gameState !== 'nameEntry') return
     
     if (e.key === 'Backspace') {
       setPlayerName(prev => prev.slice(0, -1))
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      startGame()
+    } else if (e.key === 'Enter') {
+      handleNameSubmit()
     } else if (e.key.length === 1 && playerName.length < 15) {
       setPlayerName(prev => prev + e.key)
     }
-  }, [playerName, startGame])
-
+  }, [playerName, handleNameSubmit])
+  
   // Handle touch for mobile devices
-  const handleTouch = useCallback(() => {
+  const handleTouch = useCallback((e: React.MouseEvent) => {
+    // Get canvas element and dimensions
+    const canvas = gameContextRef.current.canvas
+    if (!canvas) return
+    
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    
+    // Calculate click position
+    const x = (e.clientX - rect.left) * scaleX / window.devicePixelRatio
+    const y = (e.clientY - rect.top) * scaleY / window.devicePixelRatio
+    
     if (gameContextRef.current.gameState === 'title') {
-      startGame()
-    } else if (gameContextRef.current.gameState === 'gameOver' || gameContextRef.current.gameState === 'finished') {
+      // Check if play button was clicked
+      const width = canvas.width / window.devicePixelRatio
+      const height = canvas.height / window.devicePixelRatio
+      
+      const buttonWidth = 200
+      const buttonHeight = 60
+      const buttonX = width / 2 - buttonWidth / 2
+      const buttonY = height / 2 - 30
+      
+      if (x >= buttonX && x <= buttonX + buttonWidth && 
+          y >= buttonY && y <= buttonY + buttonHeight) {
+        setGameState('nameEntry')
+        gameContextRef.current.gameState = 'nameEntry'
+        setTimeout(() => setNameInputActive(true), 100)
+      }
+    } else if (gameContextRef.current.gameState === 'nameEntry') {
+      // Check if start button was clicked
+      const width = canvas.width / window.devicePixelRatio
+      const height = canvas.height / window.devicePixelRatio
+      
+      const buttonWidth = 150
+      const buttonHeight = 40
+      const buttonX = width / 2 - buttonWidth / 2
+      const buttonY = height / 2 + 50
+      
+      if (x >= buttonX && x <= buttonX + buttonWidth && 
+          y >= buttonY && y <= buttonY + buttonHeight) {
+        handleNameSubmit()
+      }
+      
+      // Or if input box was clicked, focus it
+      const inputBoxWidth = 300
+      const inputBoxHeight = 50
+      const inputBoxX = width / 2 - inputBoxWidth / 2
+      const inputBoxY = height / 2 - 30
+      
+      if (x >= inputBoxX && x <= inputBoxX + inputBoxWidth && 
+          y >= inputBoxY && y <= inputBoxY + inputBoxHeight) {
+        setNameInputActive(true)
+      }
+    } else if (gameContextRef.current.gameState === 'finished' || 
+               gameContextRef.current.gameState === 'gameOver') {
       setGameState('title')
       gameContextRef.current.gameState = 'title'
     }
-  }, [startGame])
-
+  }, [handleNameSubmit])
+  
   // Update viewport size on window resize
   useEffect(() => {
     const handleResize = () => {
@@ -1305,6 +1645,17 @@ export default function Game() {
     }
   }, [gameLoop, handleKeyDown, handleKeyUp, handleNameInput])
   
+  // Handle name input active state
+  useEffect(() => {
+    // Create a hidden input element to capture mobile keyboard input
+    if (nameInputActive && gameContextRef.current.gameState === 'nameEntry') {
+      // If we're using a real input, focus it
+      if (nameInputRef.current) {
+        nameInputRef.current.focus()
+      }
+    }
+  }, [nameInputActive])
+  
   return (
     <div 
       className="flex items-center justify-center min-h-screen"
@@ -1316,6 +1667,22 @@ export default function Game() {
           height={viewportSize.height} 
           onCanvasReady={handleCanvasReady}
         />
+        {nameInputActive && (
+          <input
+            ref={nameInputRef}
+            type="text"
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value.slice(0, 15))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleNameSubmit()
+                e.preventDefault()
+              }
+            }}
+            className="opacity-0 absolute top-0 left-0 w-1 h-1"
+            autoFocus
+          />
+        )}
         {showJoystick && gameState === 'racing' && (
           <Joystick
             onMove={handleJoystickMove}

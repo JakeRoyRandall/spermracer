@@ -30,6 +30,8 @@ export interface Player extends Entity {
   lapTimes: number[]
   bestLapTime: number | null
   currentLapTime: number
+  speedBoostTime: number // Time remaining for speed boost
+  slowDownTime: number // Time remaining for slow effect
 }
 
 export interface AIOpponent extends Entity {
@@ -39,6 +41,8 @@ export interface AIOpponent extends Entity {
   difficulty: number
   laps: number
   lapTimes: number[]
+  speedBoostTime: number // Time remaining for speed boost
+  slowDownTime: number // Time remaining for slow effect
 }
 
 export interface Track {
@@ -49,7 +53,18 @@ export interface Track {
   startLine: { start: Vector2D; end: Vector2D }
 }
 
-export type GameState = 'title' | 'ready' | 'racing' | 'finished' | 'gameOver'
+export type PowerUpType = 'boost' | 'slowdown'
+
+export interface PowerUp {
+  id: string
+  position: Vector2D
+  type: PowerUpType
+  radius: number
+  collected: boolean
+  respawnTime: number // Time until respawn if collected
+}
+
+export type GameState = 'title' | 'ready' | 'racing' | 'finished' | 'gameOver' | 'nameEntry'
 
 export interface GameContext {
   canvas: HTMLCanvasElement | null
@@ -58,6 +73,7 @@ export interface GameContext {
   player: Player
   opponents: AIOpponent[]
   track: Track
+  powerUps: PowerUp[]
   time: number
   bestTime: number | null
   countdown: number
